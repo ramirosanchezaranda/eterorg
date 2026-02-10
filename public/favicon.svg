@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#D63230"/>
+      <stop offset="100%" stop-color="#B82825"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="108" ry="108" fill="url(#bg)"/>
+  <!-- Letter "e" -->
+  <text x="138" y="390" font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="380" font-weight="700" fill="#FFFFFF" letter-spacing="-0.03em">e</text>
+  <!-- Timer dot accent (top-right) -->
+  <circle cx="390" cy="130" r="48" fill="#FFFFFF" opacity="0.92"/>
+  <circle cx="390" cy="130" r="28" fill="url(#bg)"/>
+  <!-- Inner timer tick -->
+  <line x1="390" y1="130" x2="390" y2="108" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <line x1="390" y1="130" x2="404" y2="130" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+</svg>
