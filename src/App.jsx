@@ -163,7 +163,7 @@ export default function App() {
       }
       const ctx = audioCtxRef.current;
       if (ctx.state === "suspended") ctx.resume().catch(() => {});
-      return ctx.state === "running" ? ctx : null;
+      return ctx;
     } catch (_) { return null; }
   }, []);
 
@@ -185,20 +185,20 @@ export default function App() {
     });
   }, [getAudioCtx]);
 
-  /* Tick sound — subtle click each second */
+  /* Tick sound — audible click each second */
   const playTickSound = useCallback(() => {
     if (mutedRef.current) return;
-    const ctx = getAudioCtx(); if (!ctx) return;
+    const ctx = getAudioCtx(); if (!ctx || ctx.state !== "running") return;
     const t0 = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = 800;
-    gain.gain.setValueAtTime(0.08, t0);
-    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.08);
+    osc.type = "square";
+    osc.frequency.value = 1000;
+    gain.gain.setValueAtTime(0.12, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(t0);
-    osc.stop(t0 + 0.09);
+    osc.stop(t0 + 0.13);
   }, [getAudioCtx]);
 
   /* Completion sound — loud triumphant chord */
