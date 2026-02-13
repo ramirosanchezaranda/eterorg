@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 
 /* ── Theme & Constants ── */
 import { mkT, R, G, Y, B, O, sf, sm } from "./constants/theme";
@@ -23,18 +23,16 @@ import SubTaskInput from "./components/ui/SubTaskInput";
 /* ── Markdown ── */
 import useMd from "./hooks/useMd";
 
-/* ── Modals ── */
-import SearchModal from "./components/modals/SearchModal";
-import TaskPreview from "./components/modals/TaskPreview";
-import TrashModal from "./components/modals/TrashModal";
-import SlashMenu from "./components/modals/SlashMenu";
-import HelpModal from "./components/modals/HelpModal";
-import AiSetupModal from "./components/modals/AiSetupModal";
-import AiWriteModal from "./components/modals/AiWriteModal";
-
-/* ── Views ── */
-import CalendarView from "./components/views/CalendarView";
-import GalleryView from "./components/views/GalleryView";
+/* ── Lazy-loaded modals & views ── */
+const SearchModal = lazy(() => import("./components/modals/SearchModal"));
+const TaskPreview = lazy(() => import("./components/modals/TaskPreview"));
+const TrashModal = lazy(() => import("./components/modals/TrashModal"));
+const SlashMenu = lazy(() => import("./components/modals/SlashMenu"));
+const HelpModal = lazy(() => import("./components/modals/HelpModal"));
+const AiSetupModal = lazy(() => import("./components/modals/AiSetupModal"));
+const AiWriteModal = lazy(() => import("./components/modals/AiWriteModal"));
+const CalendarView = lazy(() => import("./components/views/CalendarView"));
+const GalleryView = lazy(() => import("./components/views/GalleryView"));
 import DocTree from "./components/views/DocTree";
 
 /* ── Services ── */
@@ -136,7 +134,10 @@ export default function App() {
   const ivs = useRef({});
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
+  const [volume, setVolume] = useState(0.5);
+  const volumeRef = useRef(0.5);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
 
   /* ── Sound system (Web Audio API) ── */
   const audioCtxRef = useRef(null);
@@ -171,13 +172,14 @@ export default function App() {
   const playStartSound = useCallback(() => {
     if (mutedRef.current) return;
     const ctx = getAudioCtx(); if (!ctx) return;
+    const v = volumeRef.current;
     const t0 = ctx.currentTime;
     [440, 554.37].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.22, t0 + i * 0.12);
+      gain.gain.setValueAtTime(0.25 * v, t0 + i * 0.12);
       gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5 + i * 0.12);
       osc.connect(gain); gain.connect(ctx.destination);
       osc.start(t0 + i * 0.12);
@@ -185,26 +187,35 @@ export default function App() {
     });
   }, [getAudioCtx]);
 
-  /* Tick sound — audible click each second */
+  /* Tick sound — metronome click each second */
   const playTickSound = useCallback(() => {
     if (mutedRef.current) return;
     const ctx = getAudioCtx(); if (!ctx || ctx.state !== "running") return;
+    const v = volumeRef.current;
     const t0 = ctx.currentTime;
-    const osc = ctx.createOscillator();
+    /* Wood-block metronome: short noise burst filtered to a click */
+    const bufLen = Math.floor(ctx.sampleRate * 0.015);
+    const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufLen * 0.15));
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 3500;
+    bp.Q.value = 3;
     const gain = ctx.createGain();
-    osc.type = "square";
-    osc.frequency.value = 1000;
-    gain.gain.setValueAtTime(0.12, t0);
-    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(t0);
-    osc.stop(t0 + 0.13);
+    gain.gain.setValueAtTime(0.35 * v, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.04);
+    src.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
+    src.start(t0);
   }, [getAudioCtx]);
 
-  /* Completion sound — loud triumphant chord */
+  /* Completion sound — triumphant chord */
   const playDoneSound = useCallback(() => {
     if (mutedRef.current) return;
     const ctx = getAudioCtx(); if (!ctx) return;
+    const v = volumeRef.current;
     const t0 = ctx.currentTime;
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
     notes.forEach((freq, i) => {
@@ -212,7 +223,7 @@ export default function App() {
       const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.4, t0 + i * 0.1);
+      gain.gain.setValueAtTime(0.45 * v, t0 + i * 0.1);
       gain.gain.exponentialRampToValueAtTime(0.001, t0 + 1.2 + i * 0.1);
       osc.connect(gain); gain.connect(ctx.destination);
       osc.start(t0 + i * 0.1);
@@ -446,6 +457,7 @@ export default function App() {
         if (savedSettings.favs) setFavs(savedSettings.favs);
         if (savedSettings.recent) setRecent(savedSettings.recent);
         if (savedSettings.muted) setMuted(true);
+        if (savedSettings.volume !== undefined) { setVolume(savedSettings.volume); volumeRef.current = savedSettings.volume; }
       }
       setDbReady(true);
     })();
@@ -471,11 +483,11 @@ export default function App() {
     const timer = setTimeout(() => {
       db.saveSettings({
         id: "default", userName, userRole,
-        darkMode: dk, lang, onboarded, favs, recent, muted,
+        darkMode: dk, lang, onboarded, favs, recent, muted, volume,
       });
     }, 600);
     return () => clearTimeout(timer);
-  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, dbReady]);
+  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, dbReady]);
 
   const STab = ({ icon, label, active, onClick, badge }) => (
     <button onClick={onClick} title={isMini ? label : undefined} style={{ display: "flex", alignItems: "center", justifyContent: isMini ? "center" : "flex-start", gap: isMini ? 0 : 8, width: "100%", padding: isMini ? "8px 0" : "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: sf, color: active ? t.fg : t.mt, background: active ? t.at : "transparent", transition: "all .12s", position: "relative" }}>
@@ -534,8 +546,8 @@ export default function App() {
     <div style={{ display: "flex", height: "100vh", background: t.bg, color: t.fg, fontFamily: sf, transition: "background .4s,color .4s", overflow: "hidden" }}>
 
       <Toasts items={notifs} onDismiss={(id) => setNotifs((p) => p.filter((n) => n.id !== id))} t={t} />
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} tasks={tasks} docs={docs} setAD={(id) => { setActiveDoc(id); setEditingDoc(false); addRecent(id); }} setV={setView} t={t} T={T} />
-      {aiPreview && <TaskPreview tasks={aiPreview.tasks} docName={aiPreview.docName} t={t} T={T} onCancel={() => setAiP(null)} onConfirm={confirmAi} onToggle={(i) => setAiP((p) => ({ ...p, tasks: p.tasks.map((x, j) => (j === i ? { ...x, selected: !x.selected } : x)) }))} onTime={(i, m) => setAiP((p) => ({ ...p, tasks: p.tasks.map((x, j) => (j === i ? { ...x, minutes: m } : x)) }))} />}
+      <Suspense fallback={null}><SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} tasks={tasks} docs={docs} setAD={(id) => { setActiveDoc(id); setEditingDoc(false); addRecent(id); }} setV={setView} t={t} T={T} /></Suspense>
+      {aiPreview && <Suspense fallback={null}><TaskPreview tasks={aiPreview.tasks} docName={aiPreview.docName} t={t} T={T} onCancel={() => setAiP(null)} onConfirm={confirmAi} onToggle={(i) => setAiP((p) => ({ ...p, tasks: p.tasks.map((x, j) => (j === i ? { ...x, selected: !x.selected } : x)) }))} onTime={(i, m) => setAiP((p) => ({ ...p, tasks: p.tasks.map((x, j) => (j === i ? { ...x, minutes: m } : x)) }))} /></Suspense>}
       {templateOpen && (
         <div onClick={() => setTemplateOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: t.ov, backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div onClick={(e) => e.stopPropagation()} className="fi" style={{ background: t.bg, border: `1px solid ${t.bd}`, borderRadius: 16, width: "100%", maxWidth: 440, overflow: "hidden" }}>
@@ -556,11 +568,11 @@ export default function App() {
           </div>
         </div>
       )}
-      {trashOpen && <TrashModal trash={trash} onRestore={restoreTrash} onPermanent={permDelete} onClose={() => setTrashOpen(false)} t={t} T={T} />}
-      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} t={t} T={T} />
-      <AiSetupModal open={aiSetup} onClose={() => setAiSetup(false)} onSave={handleAiKeySave} hasKey={!!getGroqKey()} t={t} T={T} />
-      <AiWriteModal open={aiWrite.open} mode={aiWrite.mode} onClose={() => setAiWrite({ open: false, mode: "ai" })} onSubmit={handleAiWrite} loading={aiWriting} t={t} T={T} />
-      {slashOpen && <SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} />}
+      {trashOpen && <Suspense fallback={null}><TrashModal trash={trash} onRestore={restoreTrash} onPermanent={permDelete} onClose={() => setTrashOpen(false)} t={t} T={T} /></Suspense>}
+      <Suspense fallback={null}><HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} t={t} T={T} /></Suspense>
+      <Suspense fallback={null}><AiSetupModal open={aiSetup} onClose={() => setAiSetup(false)} onSave={handleAiKeySave} hasKey={!!getGroqKey()} t={t} T={T} /></Suspense>
+      <Suspense fallback={null}><AiWriteModal open={aiWrite.open} mode={aiWrite.mode} onClose={() => setAiWrite({ open: false, mode: "ai" })} onSubmit={handleAiWrite} loading={aiWriting} t={t} T={T} /></Suspense>
+      {slashOpen && <Suspense fallback={null}><SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} /></Suspense>}
       <input ref={importRef} type="file" accept=".md,.txt" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) importDoc(e.target.files[0]); e.target.value = ""; }} />
 
       {/* ═══ SIDEBAR ═══ */}
@@ -598,7 +610,10 @@ export default function App() {
               <button onClick={() => setSearchOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("helpShortcutSearch")}><SearchI s={10} /></button>
               <button onClick={() => setHelpOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("helpShortcutHelp")}><HelpI s={10} /></button>
               <button onClick={requestNotifPerm} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("enableNotifications")}><BellI s={10} /></button>
-              <button onClick={() => { setMuted(!muted); notify(muted ? T("soundOn") : T("soundOff"), muted ? "🔊" : "🔇"); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: muted ? R : t.mt, fontSize: 11 }} title={muted ? T("soundOn") : T("soundOff")}>{muted ? "🔇" : "🔊"}</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 3, position: "relative" }}>
+                <button onClick={() => { setMuted(!muted); notify(muted ? T("soundOn") : T("soundOff"), muted ? "🔊" : "🔇"); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: muted ? R : t.mt, fontSize: 11 }} title={muted ? T("soundOn") : T("soundOff")}>{muted ? "🔇" : "🔊"}</button>
+                {!isMini && <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={(e) => { const v = parseFloat(e.target.value); setVolume(v); if (v > 0 && muted) setMuted(false); if (v === 0) setMuted(true); }} style={{ width: 52, height: 3, accentColor: B, opacity: muted ? 0.3 : 0.8, cursor: "pointer" }} title={`${Math.round(volume * 100)}%`} />}
+              </div>
               <button onClick={() => { if (getGroqKey()) { setGroqKey(""); notify(T("apiKeyCleared"), "🔑"); } else { setAiSetup(true); } }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: getGroqKey() ? G : t.mt }} title={getGroqKey() ? T("clearApiKey") : T("setApiKey")}><KeyI s={10} /></button>
             </div>
             {!isMini && <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -755,10 +770,10 @@ export default function App() {
             </div>}
 
             {/* ═══ CALENDAR ═══ */}
-            {view === "calendar" && <CalendarView tasks={tasks} onCreateTask={createCalTask} onSchedule={scheduleTask} onUnschedule={unscheduleTask} onRemoveTask={removeT} play={play} pause={pause} markDone={markDone} t={t} T={T} />}
+            {view === "calendar" && <Suspense fallback={null}><CalendarView tasks={tasks} onCreateTask={createCalTask} onSchedule={scheduleTask} onUnschedule={unscheduleTask} onRemoveTask={removeT} play={play} pause={pause} markDone={markDone} t={t} T={T} /></Suspense>}
 
             {/* ═══ GALLERY ═══ */}
-            {view === "gallery" && <GalleryView docs={docs} setAD={(id) => { setActiveDoc(id); addRecent(id); }} setV={setView} onAddDoc={addBlankDoc} t={t} T={T} />}
+            {view === "gallery" && <Suspense fallback={null}><GalleryView docs={docs} setAD={(id) => { setActiveDoc(id); addRecent(id); }} setV={setView} onAddDoc={addBlankDoc} t={t} T={T} /></Suspense>}
 
             {/* ═══ DOCS ═══ */}
             {view === "docs" && <div className="fi">
