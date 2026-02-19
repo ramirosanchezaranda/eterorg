@@ -12,6 +12,7 @@ import {
   Sparkle, LinkI, XI, ArrowR, SearchI, Star, Board, TableI, HistI,
   CalI, GallI, UpI, CopyI, DlI, FilterI, BellI, HelpI, KeyI,
   MicI, SkipI, EditI, ExportI, ImportI, FolderOpenI, GearI,
+  VolumeI, VolMuteI,
 } from "./components/icons";
 
 /* ── UI primitives ── */
@@ -945,11 +946,11 @@ export default function App() {
               <button onClick={() => setSearchOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("helpShortcutSearch")}><SearchI s={10} /></button>
               <button onClick={() => setHelpOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("helpShortcutHelp")}><HelpI s={10} /></button>
               <div ref={volPopRef} style={{ position: "relative", display: "inline-flex" }}>
-                <button onClick={() => setVolPopOpen((p) => !p)} onContextMenu={(e) => { e.preventDefault(); setMuted(!muted); notify(muted ? T("soundOn") : T("soundOff"), muted ? "🔊" : "🔇"); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: muted ? R : t.mt, fontSize: 11 }} title={muted ? T("soundOn") : T("soundOff")}>{muted ? "🔇" : "🔊"}</button>
+                <button onClick={() => setVolPopOpen((p) => !p)} onContextMenu={(e) => { e.preventDefault(); setMuted(!muted); notify(muted ? T("soundOn") : T("soundOff"), muted ? "🔊" : "🔇"); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: muted ? R : t.mt, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }} title={muted ? T("soundOn") : T("soundOff")}>{muted ? <VolMuteI s={10} /> : <VolumeI s={10} />}</button>
                 {volPopOpen && <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 6, background: t.card, border: `1px solid ${t.bd}`, borderRadius: 12, padding: "12px 10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, boxShadow: "0 4px 20px rgba(0,0,0,.18)", zIndex: 50, minWidth: 38 }}>
                   <span style={{ fontSize: 9, fontWeight: 600, color: t.mt, fontFamily: sf }}>{Math.round(volume * 100)}%</span>
                   <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={(e) => { const v = parseFloat(e.target.value); setVolume(v); if (v > 0 && muted) setMuted(false); if (v === 0) setMuted(true); }} style={{ writingMode: "vertical-lr", direction: "rtl", width: 4, height: 90, accentColor: B, cursor: "pointer", WebkitAppearance: "slider-vertical" }} />
-                  <button onClick={() => { setMuted(!muted); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 6, color: muted ? R : t.mt, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{muted ? "🔇" : "🔊"}</button>
+                  <button onClick={() => { setMuted(!muted); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 6, color: muted ? R : t.mt, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{muted ? <VolMuteI s={10} /> : <VolumeI s={10} />}</button>
                 </div>}
               </div>
               <button onClick={() => setSettingsOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("settings")}><GearI s={10} /></button>
