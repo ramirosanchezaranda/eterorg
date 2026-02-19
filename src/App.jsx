@@ -53,9 +53,20 @@ export default function App() {
   const T = useT(lang);
   const STL = useMemo(() => ({ todo: T("toDo"), progress: T("inProgress"), done: T("done") }), [T]);
   const [sbMode, setSbMode] = useState(() => window.innerWidth > 768 ? "open" : "closed");
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  useEffect(() => {
+    const onResize = () => {
+      const mob = window.innerWidth <= 768;
+      setIsMobile(mob);
+      if (mob) setSbMode((m) => m === "open" ? "closed" : m);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const isMini = sbMode === "mini";
   const sbW = sbMode === "open" ? 256 : sbMode === "mini" ? 52 : 0;
-  const toggleSb = () => setSbMode((m) => m === "open" ? (window.innerWidth <= 768 ? "closed" : "mini") : "open");
+  const toggleSb = () => setSbMode((m) => m === "open" ? (isMobile ? "closed" : "mini") : "open");
+  const selectView = (v) => { setView(v); if (isMobile) setSbMode("closed"); };
   const [view, setView] = useState("timers");
   const [searchOpen, setSearchOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -384,6 +395,8 @@ export default function App() {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQ, setSlashQ] = useState("");
   const [slashPos, setSlashPos] = useState({ x: 0, y: 0 });
+  const [slashHi, setSlashHi] = useState(0);
+  const slashIdx = useRef(-1); /* char index where '/' was typed */
   const edRef = useRef(null);
 
   /* UNDO/REDO */
@@ -478,16 +491,24 @@ export default function App() {
   };
 
   /* Slash */
+  const slashItems = useRef([]);
   const handleEdKey = (e) => {
-    if (e.key === "/" && !slashOpen) { const { x, y } = getCaretXY(e.target); setSlashPos({ x: Math.min(x, window.innerWidth - 240), y: Math.min(y + 20, window.innerHeight - 280) }); setSlashOpen(true); setSlashQ(""); }
-    else if (slashOpen && e.key === "Escape") setSlashOpen(false);
+    /* Ctrl/Cmd + Enter → exit edit, show preview */
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); if (editingDoc) { saveHistory(); setEditingDoc(false); } return; }
+    if (e.key === "/" && !slashOpen) { const { x, y } = getCaretXY(e.target); setSlashPos({ x: Math.min(x, window.innerWidth - 240), y: Math.min(y + 20, window.innerHeight - 280) }); slashIdx.current = e.target.selectionStart; setSlashOpen(true); setSlashQ(""); setSlashHi(0); }
+    else if (slashOpen) {
+      if (e.key === "Escape") { setSlashOpen(false); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); setSlashHi((p) => { const len = slashItems.current.length || 1; return (p + 1) % len; }); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setSlashHi((p) => { const len = slashItems.current.length || 1; return (p - 1 + len) % len; }); }
+      else if (e.key === "Enter") { e.preventDefault(); const items = slashItems.current; if (items.length) handleSlashSel(items[slashHi] || items[0]); }
+    }
     if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); if (undoStack.length) { const prev = undoStack[undoStack.length - 1]; setRedo((p) => [...p, currentDoc?.content || ""]); setUndo((p) => p.slice(0, -1)); if (currentDoc) updateDoc(currentDoc.id, { content: prev }); } }
     if ((e.metaKey || e.ctrlKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); if (redoStack.length) { const next = redoStack[redoStack.length - 1]; setUndo((p) => [...p, currentDoc?.content || ""]); setRedo((p) => p.slice(0, -1)); if (currentDoc) updateDoc(currentDoc.id, { content: next }); } }
   };
-  const handleEdInput = (e) => { const v = e.target.value; pushUndo(currentDoc?.content || ""); updateDoc(currentDoc.id, { content: v }); if (slashOpen) { const li = v.lastIndexOf("/"); if (li >= 0) setSlashQ(v.slice(li + 1).split("\n")[0]); else setSlashOpen(false); } };
+  const handleEdInput = (e) => { const v = e.target.value; pushUndo(currentDoc?.content || ""); updateDoc(currentDoc.id, { content: v }); if (slashOpen) { const si = slashIdx.current; if (si >= 0 && v[si] === "/") { const q = v.slice(si + 1).split("\n")[0]; setSlashQ(q); setSlashHi(0); } else { setSlashOpen(false); } } };
   const handleSlashSel = (cmd) => {
     if (!currentDoc) return;
-    const c = currentDoc.content || ""; const li = c.lastIndexOf("/"); const before = li >= 0 ? c.slice(0, li) : c; const after = li >= 0 ? c.slice(li + 1 + slashQ.length) : "";
+    const c = currentDoc.content || ""; const si = slashIdx.current; const before = si >= 0 ? c.slice(0, si) : c; const after = si >= 0 ? c.slice(si + 1 + slashQ.length) : "";
     if (cmd.voice) {
       // Remove the slash text first then start dictation panel
       updateDoc(currentDoc.id, { content: before + after });
@@ -833,7 +854,9 @@ export default function App() {
 
   /* ═══════ MAIN RENDER ═══════ */
   return (
-    <div style={{ display: "flex", height: "100vh", background: t.bg, color: t.fg, fontFamily: sf, transition: "background .4s,color .4s", overflow: "hidden" }}>
+    <div style={{ display: "flex", height: "100dvh", background: t.bg, color: t.fg, fontFamily: sf, transition: "background .4s,color .4s", overflow: "hidden" }}>
+      {/* Mobile sidebar overlay */}
+      {isMobile && sbMode === "open" && <div className="sidebar-overlay" onClick={() => setSbMode("closed")} />}
 
       <Toasts items={notifs} onDismiss={(id) => setNotifs((p) => p.filter((n) => n.id !== id))} t={t} />
       <Suspense fallback={null}><SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} tasks={tasks} docs={docs} setAD={(id) => { setActiveDoc(id); setEditingDoc(false); addRecent(id); }} setV={setView} t={t} T={T} /></Suspense>
@@ -883,12 +906,12 @@ export default function App() {
         onClearAllData={async () => { setTasks([]); setDocs([]); setTrash([]); setOnboarded(false); setUserName(""); setUserRole(""); await db.saveSettings({ id: "default" }); await db.saveTasks([]); await db.saveDocs([]); }}
         notify={notify} roles={T("roles")}
       /></Suspense>
-      {slashOpen && <Suspense fallback={null}><SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} /></Suspense>}
+      {slashOpen && <Suspense fallback={null}><SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} activeIdx={slashHi} itemsRef={slashItems} /></Suspense>}
       <input ref={importRef} type="file" accept=".md,.txt" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) importDoc(e.target.files[0]); e.target.value = ""; }} />
       <input ref={importProjectRef} type="file" accept=".json" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) handleImportProject(e.target.files[0]); e.target.value = ""; }} />
 
       {/* ═══ SIDEBAR ═══ */}
-      <div style={{ width: sbW, minWidth: sbW, background: t.sb, borderRight: sbMode !== "closed" ? `1px solid ${t.bd}` : "none", display: "flex", flexDirection: "column", transition: "all .25s cubic-bezier(.4,0,.2,1)", overflow: "hidden" }}>
+      <div className={isMobile && sbMode === "open" ? "sidebar-mobile safe-top" : "safe-top"} style={{ width: sbW, minWidth: sbW, background: t.sb, borderRight: sbMode !== "closed" ? `1px solid ${t.bd}` : "none", display: "flex", flexDirection: "column", transition: "all .25s cubic-bezier(.4,0,.2,1)", overflow: "hidden" }}>
         <div style={{ padding: isMini ? "10px 6px 8px" : "14px 14px 10px", borderBottom: `1px solid ${t.bd}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: isMini ? "center" : "space-between", marginBottom: isMini ? 8 : 12 }}>
             {!isMini && <div><h1 style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.03em" }}>eter<span style={{ color: R }}>Org</span></h1>{userName && <span style={{ fontSize: 10, fontFamily: sf, color: t.mt }}>{userName}</span>}</div>}
@@ -899,12 +922,12 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <STab icon={<TimerI s={13} />} label={T("timers")} active={view === "timers"} onClick={() => setView("timers")} badge={tasks.filter((x) => x.running).length} />
-            <STab icon={<Board s={13} />} label={T("board")} active={view === "board"} onClick={() => setView("board")} />
-            <STab icon={<TableI s={13} />} label={T("table")} active={view === "table"} onClick={() => setView("table")} />
-            <STab icon={<CalI s={13} />} label={T("calendar")} active={view === "calendar"} onClick={() => setView("calendar")} />
-            <STab icon={<GallI s={13} />} label={T("gallery")} active={view === "gallery"} onClick={() => setView("gallery")} />
-            <STab icon={<FileT s={13} />} label={T("docs")} active={view === "docs"} onClick={() => setView("docs")} />
+            <STab icon={<TimerI s={13} />} label={T("timers")} active={view === "timers"} onClick={() => selectView("timers")} badge={tasks.filter((x) => x.running).length} />
+            <STab icon={<Board s={13} />} label={T("board")} active={view === "board"} onClick={() => selectView("board")} />
+            <STab icon={<TableI s={13} />} label={T("table")} active={view === "table"} onClick={() => selectView("table")} />
+            <STab icon={<CalI s={13} />} label={T("calendar")} active={view === "calendar"} onClick={() => selectView("calendar")} />
+            <STab icon={<GallI s={13} />} label={T("gallery")} active={view === "gallery"} onClick={() => selectView("gallery")} />
+            <STab icon={<FileT s={13} />} label={T("docs")} active={view === "docs"} onClick={() => selectView("docs")} />
           </div>
         </div>
         {!isMini && <div style={{ flex: 1, overflowY: "auto", padding: "6px 6px" }}>
@@ -950,17 +973,17 @@ export default function App() {
       {/* ═══ MAIN ═══ */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {sbMode === "closed" && (
-          <div style={{ padding: "8px 16px", borderBottom: `1px solid ${t.bd}`, display: "flex", alignItems: "center", gap: 6 }}>
+          <div className="safe-top" style={{ padding: isMobile ? "8px 10px" : "8px 16px", borderBottom: `1px solid ${t.bd}`, display: "flex", alignItems: "center", gap: 6 }}>
             <button onClick={() => setSbMode("open")} style={sB(t)}><SideI s={14} /></button>
-            <h1 style={{ fontSize: 14, fontWeight: 700 }}>eter<span style={{ color: R }}>Org</span></h1><div style={{ flex: 1 }} />
-            {["timers", "board", "table", "calendar", "gallery", "docs"].map((v) => <button key={v} onClick={() => setView(v)} style={{ height: 26, padding: "0 8px", borderRadius: 6, border: `1px solid ${view === v ? t.fg : t.bd}`, background: view === v ? t.at : "transparent", color: view === v ? t.fg : t.mt, cursor: "pointer", fontSize: 10, fontWeight: 500, fontFamily: sf, textTransform: "capitalize" }}>{v}</button>)}
+            <h1 style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>eter<span style={{ color: R }}>Org</span></h1>
+            <div className="topbar-views">{["timers", "board", "table", "calendar", "gallery", "docs"].map((v) => <button key={v} onClick={() => setView(v)} style={{ height: 26, padding: "0 8px", borderRadius: 6, border: `1px solid ${view === v ? t.fg : t.bd}`, background: view === v ? t.at : "transparent", color: view === v ? t.fg : t.mt, cursor: "pointer", fontSize: 10, fontWeight: 500, fontFamily: sf, textTransform: "capitalize", whiteSpace: "nowrap", flexShrink: 0 }}>{v}</button>)}</div>
             <button onClick={() => setSearchOpen(true)} style={sB(t)}><SearchI s={14} /></button>
             <button onClick={() => setSettingsOpen(true)} style={sB(t)} title={T("settings")}><GearI s={14} /></button>
             <button onClick={() => setDk(!dk)} style={sB(t)}>{dk ? <SunI s={14} /> : <MoonI s={14} />}</button>
           </div>
         )}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: view === "board" ? "20px 16px" : "28px 24px", display: "flex", justifyContent: "center" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? (view === "board" ? "12px 8px" : "16px 12px") : (view === "board" ? "20px 16px" : "28px 24px"), display: "flex", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: view === "board" ? 1100 : view === "table" ? 920 : view === "calendar" ? 900 : view === "gallery" ? 900 : 680 }}>
 
             {/* ═══ TIMERS ═══ */}
@@ -996,12 +1019,12 @@ export default function App() {
                 {filteredTasks.map((task) => { const total = task.totalSeconds || task.minutes * 60, prog = total > 0 ? (total - task.remaining) / total : 0; const pr = PRIOS.find((p) => p.k === task.priority) || PRIOS[2];
                   return (
                     <div key={task.id} className="fi" draggable onDragStart={() => setTaskDrag(task.id)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (taskDrag && taskDrag !== task.id) reorderT(taskDrag, task.id); setTaskDrag(null); }}
-                      style={{ background: t.card, border: `1px solid ${t.bd}`, borderRadius: 14, padding: "20px 22px", opacity: task.done ? .5 : 1, position: "relative", overflow: "hidden", cursor: "grab" }}>
+                      style={{ background: t.card, border: `1px solid ${t.bd}`, borderRadius: 14, padding: isMobile ? "14px 12px" : "20px 22px", opacity: task.done ? .5 : 1, position: "relative", overflow: "hidden", cursor: "grab" }}>
                       {task.done && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2.5, background: G }} />}
                       {task.running && <div style={{ position: "absolute", top: 0, left: 0, width: `${prog * 100}%`, height: 2.5, background: Y, transition: "width 1s linear" }} />}
-                      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-                        <div style={{ position: "relative", flexShrink: 0 }}>
-                          <Ring p={prog} sz={90} st={3} t={t} run={task.running} dn={task.done} />
+                      <div className="timer-card-inner">
+                        <div className="ring-wrap" style={{ position: "relative", flexShrink: 0 }}>
+                          <Ring p={prog} sz={isMobile ? 72 : 90} st={3} t={t} run={task.running} dn={task.done} />
                           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
                             <span style={{ fontFamily: sm, fontSize: 20, fontWeight: 300, lineHeight: 1, textDecoration: task.done ? "line-through" : "none", color: task.done ? t.mt : t.fg }}>{fmt(task.remaining)}</span>
                             <span style={{ fontSize: 8, letterSpacing: "0.12em", color: task.running ? Y : t.mt, marginTop: 3, textTransform: "uppercase", fontFamily: sf, fontWeight: task.running ? 600 : 400 }}>{task.done ? T("done") : task.running ? T("active") : T("idle")}</span>
@@ -1048,8 +1071,8 @@ export default function App() {
                 {!showAdd
                   ? <button onClick={() => setShowAdd(true)} style={{ height: 44, borderRadius: 12, border: `1.5px dashed ${t.bd}`, background: "transparent", color: t.mt, cursor: "pointer", fontFamily: sf, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus s={14} />{T("addTask")}</button>
                   : <div className="fi" style={{ background: t.card, border: `1px solid ${t.bd}`, borderRadius: 12, padding: "16px 18px" }}>
-                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}><input autoFocus value={nN} onChange={(e) => setNN(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTask()} placeholder={T("taskName")} style={{ flex: 1, height: 36, borderRadius: 8, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: "0 12px", fontFamily: sf, fontSize: 13 }} /><div style={{ display: "flex", alignItems: "center", gap: 2 }}><input type="number" min={0} value={nM} onChange={(e) => setNM(Math.max(0, parseInt(e.target.value) || 0))} style={{ width: 44, height: 36, borderRadius: "8px 0 0 8px", border: `1px solid ${t.bd}`, borderRight: "none", background: t.inp, color: t.fg, fontFamily: sf, fontSize: 13, textAlign: "center" }} title="min" /><span style={{ height: 36, display: "flex", alignItems: "center", background: t.inp, color: t.mt, fontSize: 9, fontFamily: sf, borderTop: `1px solid ${t.bd}`, borderBottom: `1px solid ${t.bd}`, padding: "0 1px" }}>:</span><input type="number" min={0} max={59} value={nS} onChange={(e) => setNS(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} style={{ width: 44, height: 36, borderRadius: "0 8px 8px 0", border: `1px solid ${t.bd}`, borderLeft: "none", background: t.inp, color: t.fg, fontFamily: sf, fontSize: 13, textAlign: "center" }} title="sec" /></div></div>
-                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}><input autoFocus value={nN} onChange={(e) => setNN(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTask()} placeholder={T("taskName")} style={{ flex: 1, minWidth: 0, height: 36, borderRadius: 8, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: "0 12px", fontFamily: sf, fontSize: 13 }} /><div style={{ display: "flex", alignItems: "center", gap: 2 }}><input type="number" min={0} value={nM} onChange={(e) => setNM(Math.max(0, parseInt(e.target.value) || 0))} style={{ width: 44, height: 36, borderRadius: "8px 0 0 8px", border: `1px solid ${t.bd}`, borderRight: "none", background: t.inp, color: t.fg, fontFamily: sf, fontSize: 13, textAlign: "center" }} title="min" /><span style={{ height: 36, display: "flex", alignItems: "center", background: t.inp, color: t.mt, fontSize: 9, fontFamily: sf, borderTop: `1px solid ${t.bd}`, borderBottom: `1px solid ${t.bd}`, padding: "0 1px" }}>:</span><input type="number" min={0} max={59} value={nS} onChange={(e) => setNS(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} style={{ width: 44, height: 36, borderRadius: "0 8px 8px 0", border: `1px solid ${t.bd}`, borderLeft: "none", background: t.inp, color: t.fg, fontFamily: sf, fontSize: 13, textAlign: "center" }} title="sec" /></div></div>
+                    <div className="add-form-fields" style={{ marginBottom: 8 }}>
                       <select value={nP} onChange={(e) => setNP(e.target.value)} style={{ flex: 1, height: 32, borderRadius: 7, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, fontFamily: sf, fontSize: 11, padding: "0 6px" }}>{PRIOS.map((p) => <option key={p.k} value={p.k}>{T(p.lk)}</option>)}</select>
                       <input value={nT} onChange={(e) => setNT(e.target.value)} placeholder={T("tags")} style={{ flex: 1, height: 32, borderRadius: 7, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, fontFamily: sf, fontSize: 11, padding: "0 8px" }} />
                       <input value={nA} onChange={(e) => setNA(e.target.value)} placeholder={T("assignee")} style={{ flex: 1, height: 32, borderRadius: 7, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, fontFamily: sf, fontSize: 11, padding: "0 8px" }} />
@@ -1063,7 +1086,7 @@ export default function App() {
             {/* ═══ BOARD ═══ */}
             {view === "board" && <div className="fi"><h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em", marginBottom: 16 }}>{T("board")}</h2><FilterBar filters={filters} setFilters={setFilters} t={t} T={T} />
               {filteredTasks.length === 0 && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}><div className="glass-bar" style={{ textAlign: "center", padding: "36px 44px", borderRadius: 24, background: t.glass, border: `1px solid ${t.glassBd}`, boxShadow: "0 4px 24px rgba(0,0,0,.08)", maxWidth: 340 }}><div style={{ width: 52, height: 52, borderRadius: 14, background: t.glassHi, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Board s={22} c={t.mt} /></div><div style={{ fontSize: 15, fontWeight: 700, color: t.fg, fontFamily: sf, marginBottom: 5, letterSpacing: "-0.02em" }}>{T("boardEmpty")}</div><div style={{ fontSize: 12, color: t.mt, fontFamily: sf, lineHeight: 1.6, marginBottom: 16 }}>{T("boardEmptyDesc")}</div><button onClick={() => { setView("timers"); setShowAdd(true); }} className="glass-btn" style={{ height: 34, padding: "0 18px", borderRadius: 10, border: "none", background: G, color: "#fff", cursor: "pointer", fontFamily: sf, fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, boxShadow: `0 2px 8px ${G}40` }}><Plus s={12} />{T("addTask")}</button></div></div>}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, minHeight: filteredTasks.length ? 360 : 0 }}>
+              <div className="board-grid" style={{ minHeight: filteredTasks.length ? 360 : 0 }}>
                 {STS.map((status) => <div key={status} onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = t.dr; }} onDragLeave={(e) => { e.currentTarget.style.background = t.kc; }} onDrop={(e) => { e.currentTarget.style.background = t.kc; const id = e.dataTransfer.getData("taskId"); if (id) chgStatus(id, status); }} style={{ background: t.kc, borderRadius: 12, padding: "12px 10px", border: `1px solid ${t.bd}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "0 4px" }}><div style={{ width: 8, height: 8, borderRadius: "50%", background: STC[status] }} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: sf, color: t.fg }}>{STL[status]}</span><span style={{ fontSize: 10, fontFamily: sf, color: t.mt, marginLeft: "auto" }}>{filteredTasks.filter((tk) => (tk.status || "todo") === status).length}</span></div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1133,7 +1156,7 @@ export default function App() {
                     {/* Breadcrumbs */}
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{getBc(currentDoc.id).map((bc, i, arr) => <span key={bc.id} style={{ display: "flex", alignItems: "center", gap: 6 }}><button onClick={() => { if (bc.type === "doc") { setActiveDoc(bc.id); addRecent(bc.id); } }} style={{ border: "none", background: "transparent", color: i === arr.length - 1 ? t.fg : t.mt, cursor: bc.type === "doc" ? "pointer" : "default", fontFamily: sf, fontSize: 12, fontWeight: i === arr.length - 1 ? 600 : 400, padding: 0, letterSpacing: "-0.01em" }}>{bc.type === "folder" ? "📁" : (bc.icon || "📄")} {bc.name}</button>{i < arr.length - 1 && <span style={{ color: t.mt, fontSize: 9, opacity: 0.4 }}>/</span>}</span>)}</div>
                     {/* Cover */}
-                    {currentDoc.cover && <div className="glass-cover" style={{ height: 160, borderRadius: 18, marginBottom: -40, background: currentDoc.cover, boxShadow: "0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08)" }}>
+                    {currentDoc.cover && <div className="glass-cover" style={{ height: isMobile ? 110 : 160, borderRadius: isMobile ? 12 : 18, marginBottom: -40, background: currentDoc.cover, boxShadow: "0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08)" }}>
                       {editingDoc && <button className="glass-btn" onClick={() => updateDoc(currentDoc.id, { cover: null })} style={{ position: "absolute", top: 10, right: 10, zIndex: 2, width: 28, height: 28, borderRadius: 10, border: "1px solid rgba(255,255,255,.2)", background: "rgba(0,0,0,.35)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><XI s={10} /></button>}
                     </div>}
                     {/* Icon + Title — Liquid Glass */}
@@ -1160,7 +1183,7 @@ export default function App() {
                     {editingDoc
                       ? <div>
                           <div style={{ fontSize: 10, color: t.mt, marginBottom: 6, fontFamily: sf }}>{T("typeSlash")} <span style={{ color: R, fontWeight: 600 }}>/</span> {T("forCommands")} · <span style={{ color: B }}>{T("wikiLinks")}</span> · Ctrl+Z {T("undo")} · Ctrl+Y {T("redo")}</div>
-                          <textarea ref={edRef} value={currentDoc.content || ""} onChange={handleEdInput} onKeyDown={handleEdKey} placeholder={T("startWriting")} style={{ width: "100%", minHeight: 440, borderRadius: 12, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: 18, fontFamily: sf, fontSize: 13, lineHeight: 1.8, resize: "vertical" }} />
+                          <textarea ref={edRef} value={currentDoc.content || ""} onChange={handleEdInput} onKeyDown={handleEdKey} placeholder={T("startWriting")} style={{ width: "100%", minHeight: isMobile ? 280 : 440, borderRadius: 12, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: isMobile ? 12 : 18, fontFamily: sf, fontSize: 13, lineHeight: 1.8, resize: "vertical" }} />
                         </div>
                       : <div onClick={() => setEditingDoc(true)} style={{ lineHeight: 1.75, minHeight: 280, cursor: "text" }}>{renderMd(currentDoc.content)}</div>}
                     {/* ── Dictation Panel (/iavoz) — Whisper AI ── */}

@@ -19,6 +19,10 @@ const arNow = () => {
 export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnschedule, onRemoveTask, play, pause, markDone, t, T }) {
   const [month, setMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDay, setSelectedDay] = useState(null);
+  /* responsive */
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 640);
+  useEffect(() => { const h = () => setIsMobile(window.innerWidth <= 640); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); }, []);
+  const hourH = isMobile ? 52 : HOUR_H;
   /* Inline create form state */
   const [createAt, setCreateAt] = useState(null); // { hour }
   const [cName, setCName] = useState("");
@@ -109,9 +113,9 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
   if (!selectedDay) {
     return (
       <div className="fi">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 8 }}>
           <div>
-            <h2 style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.03em", margin: 0 }}>{T("calendar")}</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", margin: 0 }}>{T("calendar")}</h2>
             <div style={{ fontSize: 10, color: t.mt, fontFamily: sf, marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
               🇦🇷 {T("arTimezone")}: {nowAR_HM()}
             </div>
@@ -122,7 +126,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
             <button onClick={nextM} style={sB(t)}><ChevR s={14} /></button>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>
+        <div className="calendar-grid">
           {[T("sun"), T("mon"), T("tue"), T("wed"), T("thu"), T("fri"), T("sat")].map((d) => (
             <div key={d} style={{ textAlign: "center", padding: "8px 0", fontSize: 10, fontFamily: sf, color: t.mt, letterSpacing: "0.1em", textTransform: "uppercase" }}>{d}</div>
           ))}
@@ -133,8 +137,8 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
             const dTasks = tasks.filter((tk) => tk.dueDate === dateStr);
             const hasScheduled = dTasks.some((tk) => tk.dueTime);
             return (
-              <div key={i} onClick={() => handleDayClick(dateStr)}
-                style={{ minHeight: 80, padding: 6, border: `1px solid ${t.bd}`, borderRadius: 8, background: isToday ? `${B}06` : t.card, position: "relative", cursor: "pointer", transition: "all .12s" }}
+              <div key={i} onClick={() => handleDayClick(dateStr)} className="calendar-cell"
+                style={{ padding: 6, border: `1px solid ${t.bd}`, borderRadius: 8, background: isToday ? `${B}06` : t.card, position: "relative", cursor: "pointer", transition: "all .12s" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = t.hv; e.currentTarget.style.borderColor = `${B}40`; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = isToday ? `${B}06` : t.card; e.currentTarget.style.borderColor = t.bd; }}
               >
@@ -182,7 +186,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
             <ChevR s={14} style={{ transform: "rotate(180deg)" }} />
           </button>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", textTransform: "capitalize", margin: 0, lineHeight: 1.2 }}>{selectedDayName}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.03em", textTransform: "capitalize", margin: 0, lineHeight: 1.2 }}>{selectedDayName}</h2>
             <div style={{ fontSize: 10, color: t.mt, fontFamily: sf, marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
               {T("dragToSchedule")}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>🇦🇷 {nowAR_HM()}</span>
@@ -205,15 +209,15 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
                   onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = `${B}08`; }}
                   onDragLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                   onDrop={(e) => { e.preventDefault(); e.currentTarget.style.background = "transparent"; handleDropOnHour(h); }}
-                  style={{ display: "flex", minHeight: HOUR_H, borderBottom: `1px solid ${t.bd}`, cursor: isCreating ? "default" : "pointer", position: "relative", transition: "background .1s" }}
+                  style={{ display: "flex", minHeight: hourH, borderBottom: `1px solid ${t.bd}`, cursor: isCreating ? "default" : "pointer", position: "relative", transition: "background .1s" }}
                   onMouseEnter={(e) => { if (!isCreating) e.currentTarget.style.background = t.hv; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                 >
-                  <div style={{ width: 64, flexShrink: 0, padding: "8px 10px 8px 0", textAlign: "right", fontSize: 11, fontFamily: sf, color: isNowHour ? B : t.mt, fontWeight: isNowHour ? 700 : 400 }}>
+                  <div style={{ width: isMobile ? 44 : 64, flexShrink: 0, padding: isMobile ? "6px 4px 6px 0" : "8px 10px 8px 0", textAlign: "right", fontSize: isMobile ? 9 : 11, fontFamily: sf, color: isNowHour ? B : t.mt, fontWeight: isNowHour ? 700 : 400 }}>
                     {fmtHour(h)}
                   </div>
                   {isNowHour && (
-                    <div style={{ position: "absolute", left: 60, right: 0, top: `${(arTime.m / 60) * 100}%`, height: 2, background: B, zIndex: 5, borderRadius: 1 }}>
+                    <div style={{ position: "absolute", left: isMobile ? 40 : 60, right: 0, top: `${(arTime.m / 60) * 100}%`, height: 2, background: B, zIndex: 5, borderRadius: 1 }}>
                       <div style={{ position: "absolute", left: -4, top: -3, width: 8, height: 8, borderRadius: "50%", background: B }} />
                     </div>
                   )}
@@ -223,7 +227,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
                       const pr = PRIOS.find((p) => p.k === blk.priority) || PRIOS[2];
                       const startOffset = (blk.startMin % 60) / 60; // fraction within the hour
                       const durHours = blk.durMin / 60;
-                      const blockH = Math.max(28, durHours * HOUR_H); // min 28px height
+                      const blockH = Math.max(28, durHours * hourH); // min 28px height
                       return (
                         <div
                           key={blk.id}
@@ -234,7 +238,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
                           className="glass-bar"
                           style={{
                             position: "absolute",
-                            top: startOffset * HOUR_H,
+                            top: startOffset * hourH,
                             left: 4,
                             right: 8,
                             height: blockH,
@@ -291,7 +295,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
 
                 {/* Inline create form */}
                 {isCreating && (
-                  <div onClick={(e) => e.stopPropagation()} style={{ margin: "0 0 0 64px", padding: "12px 14px", borderRadius: 12, background: t.card, border: `1.5px solid ${B}40`, borderLeft: `3px solid ${B}`, marginBottom: 4 }}>
+                  <div onClick={(e) => e.stopPropagation()} style={{ margin: `0 0 0 ${isMobile ? 44 : 64}px`, padding: isMobile ? "10px 10px" : "12px 14px", borderRadius: 12, background: t.card, border: `1.5px solid ${B}40`, borderLeft: `3px solid ${B}`, marginBottom: 4 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, fontFamily: sf, color: B, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
                       <Plus s={10} c={B} /> {T("createInCalendar")} — {fmtTime12(cHour, cMinute)}
                     </div>
@@ -340,7 +344,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
         </div>
 
         {/* Sidebar — unscheduled tasks for this day, draggable */}
-        {window.innerWidth >= 640 && (
+        {!isMobile && (
           <div style={{ width: 220, flexShrink: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 600, fontFamily: sf, color: t.mt, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
               {T("scheduledTasks")} ({dayTasks.filter(tk => tk.dueTime).length})

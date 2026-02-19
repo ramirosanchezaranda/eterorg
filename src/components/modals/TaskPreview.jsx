@@ -8,7 +8,7 @@ export default function TaskPreview({ tasks: aiT, onConfirm, onCancel, onToggle,
   const tm = sel.reduce((s, x) => s + x.minutes, 0);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: t.ov, backdropFilter: "blur(8px)" }}>
+    <div className="modal-overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: t.ov, backdropFilter: "blur(8px)" }}>
       <div className="fi" style={{ background: t.bg, border: `1px solid ${t.bd}`, borderRadius: 20, width: "100%", maxWidth: 540, maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: "18px 22px 12px", borderBottom: `1px solid ${t.bd}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

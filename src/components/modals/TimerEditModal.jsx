@@ -37,7 +37,7 @@ export default function TimerEditModal({ task, onSave, onClose, t, T }) {
   const lbl = { fontSize: 10, fontWeight: 600, color: t.mt, fontFamily: sf, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: t.ov, backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div onClick={onClose} className="modal-overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, background: t.ov, backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div onClick={(e) => e.stopPropagation()} className="fi" style={{ background: t.bg, border: `1px solid ${t.bd}`, borderRadius: 16, width: "100%", maxWidth: 440, overflow: "hidden" }}>
         {/* Header */}
         <div style={{ padding: "16px 20px", borderBottom: `1px solid ${t.bd}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>

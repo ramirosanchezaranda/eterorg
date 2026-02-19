@@ -30,8 +30,8 @@ const Toggle = ({ on, onChange, color = G, disabled }) => (
 
 /* ═══════ Section row ═══════ */
 const Row = ({ label, desc, children, t }) => (
-  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: `1px solid ${t.bd}08` }}>
-    <div style={{ flex: 1, minWidth: 0 }}>
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 12px", padding: "10px 0", borderBottom: `1px solid ${t.bd}08` }}>
+    <div style={{ flex: "1 1 140px", minWidth: 0 }}>
       <div style={{ fontSize: 13, fontWeight: 500, color: t.fg }}>{label}</div>
       {desc && <div style={{ fontSize: 11, color: t.mt, marginTop: 2, lineHeight: 1.4 }}>{desc}</div>}
     </div>
@@ -139,7 +139,7 @@ export default function SettingsModal({
   };
 
   return (
-    <div onClick={onClose} style={{
+    <div onClick={onClose} className="modal-overlay" style={{
       position: "fixed", inset: 0, zIndex: 1100, background: t.ov, backdropFilter: "blur(8px)",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>

@@ -29,7 +29,7 @@ const shortcuts = [
 export default function HelpModal({ open, onClose, t, T }) {
   if (!open) return null;
   return (
-    <div onClick={onClose} style={{
+    <div onClick={onClose} className="modal-overlay" style={{
       position: "fixed", inset: 0, zIndex: 2000, background: t.ov,
       backdropFilter: "blur(8px)", display: "flex",
       alignItems: "flex-start", justifyContent: "center", paddingTop: "12vh",

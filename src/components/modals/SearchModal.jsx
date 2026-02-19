@@ -28,7 +28,7 @@ export default function SearchModal({ open, onClose, tasks, docs, setAD, setV, t
   if (!open) return null;
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 2000, background: t.ov, backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12vh" }}>
+    <div onClick={onClose} className="modal-overlay" style={{ position: "fixed", inset: 0, zIndex: 2000, background: t.ov, backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12vh" }}>
       <div onClick={(e) => e.stopPropagation()} className="fi" style={{ width: "100%", maxWidth: 520, background: t.bg, border: `1px solid ${t.bd}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: `1px solid ${t.bd}` }}>
           <SearchI s={16} c={t.mt} />

@@ -25,7 +25,7 @@ export default function AiWriteModal({ open, mode, onClose, onSubmit, loading, t
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.45)", backdropFilter: "blur(6px)" }}>
+    <div onClick={onClose} className="modal-overlay" style={{ position: "fixed", inset: 0, zIndex: 4000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.45)", backdropFilter: "blur(6px)" }}>
       <form onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit} className="glass-bar" style={{ width: "100%", maxWidth: 420, borderRadius: 20, padding: "24px 28px", background: t.bg, border: `1px solid ${t.glassBd}`, boxShadow: "0 16px 48px rgba(0,0,0,.2)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>

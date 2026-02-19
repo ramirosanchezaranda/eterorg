@@ -20,7 +20,7 @@ export default function AiSetupModal({ open, onClose, onSave, hasKey, t, T }) {
   ];
 
   return (
-    <div onClick={onClose} style={{
+    <div onClick={onClose} className="modal-overlay" style={{
       position: "fixed", inset: 0, zIndex: 2000, background: t.ov,
       backdropFilter: "blur(8px)", display: "flex",
       alignItems: "flex-start", justifyContent: "center", paddingTop: "10vh",
