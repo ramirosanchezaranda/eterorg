@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ChevR, ChevD, Plus, Trash, Fold, Star, Grip } from "../icons";
+import { ChevR, ChevD, Plus, Trash, Fold, Star, Grip, EditI } from "../icons";
 import { tB } from "../ui/styles";
 import { Y, sf } from "../../constants/theme";
 import { uid, now } from "../../utils";
 
-export default function DocTree({ node, depth, activeDoc: ad, setAD, docs, setDocs, t, favs, toggleFav, drag, setDrag }) {
+export default function DocTree({ node, depth, activeDoc: ad, setAD, onEditDoc, docs, setDocs, t, favs, toggleFav, drag, setDrag }) {
   const [exp, setExp] = useState(true);
   const [hv, setHv] = useState(false);
   const [rn, setRn] = useState(false);
@@ -52,7 +52,7 @@ export default function DocTree({ node, depth, activeDoc: ad, setAD, docs, setDo
     >
       <div
         onClick={() => (isF ? setExp(!exp) : setAD(node.id))}
-        onDoubleClick={() => setRn(true)}
+        onDoubleClick={() => (isF ? setRn(true) : onEditDoc?.(node.id))}
         onMouseEnter={() => setHv(true)}
         onMouseLeave={() => setHv(false)}
         style={{ display: "flex", alignItems: "center", gap: 5, padding: `4px 6px 4px ${10 + depth * 16}px`, cursor: "pointer", borderRadius: 7, fontSize: 12.5, fontWeight: isA ? 500 : 400, color: isA ? t.fg : t.mt, background: isA ? t.at : hv ? t.hv : "transparent", transition: "all .12s", userSelect: "none", minHeight: 28 }}
@@ -65,6 +65,7 @@ export default function DocTree({ node, depth, activeDoc: ad, setAD, docs, setDo
         {hv && !rn && (
           <div style={{ display: "flex", gap: 2 }} onClick={(e) => e.stopPropagation()}>
             {node.type === "doc" && <button onClick={() => toggleFav(node.id)} style={{ ...tB(t), width: 18, height: 18 }}><Star s={9} c={favs.includes(node.id) ? Y : t.mt} /></button>}
+            {node.type === "doc" && <button onClick={() => setRn(true)} style={{ ...tB(t), width: 18, height: 18 }}><EditI s={8} /></button>}
             {isF && <button onClick={() => addC("doc")} style={{ ...tB(t), width: 18, height: 18 }}><Plus s={9} /></button>}
             {isF && <button onClick={() => addC("folder")} style={{ ...tB(t), width: 18, height: 18 }}><Fold s={8} /></button>}
             <button onClick={rm} style={{ ...tB(t), width: 18, height: 18 }}><Trash s={8} /></button>
@@ -72,7 +73,7 @@ export default function DocTree({ node, depth, activeDoc: ad, setAD, docs, setDo
         )}
       </div>
       {isF && exp && node.children && node.children.map((c) => (
-        <DocTree key={c.id} node={c} depth={depth + 1} activeDoc={ad} setAD={setAD} docs={docs} setDocs={setDocs} t={t} favs={favs} toggleFav={toggleFav} drag={drag} setDrag={setDrag} />
+        <DocTree key={c.id} node={c} depth={depth + 1} activeDoc={ad} setAD={setAD} onEditDoc={onEditDoc} docs={docs} setDocs={setDocs} t={t} favs={favs} toggleFav={toggleFav} drag={drag} setDrag={setDrag} />
       ))}
     </div>
   );
