@@ -113,11 +113,11 @@ export default function App() {
 
   /* FILTERS */
   const [filters, setFilters] = useState({ priority: "", status: "", tag: "" });
-  const filterTasks = (tasks) => {
-    let r = tasks;
-    if (filters.priority) r = r.filter((t) => t.priority === filters.priority);
-    if (filters.status) r = r.filter((t) => (t.status || "todo") === filters.status);
-    if (filters.tag) r = r.filter((t) => (t.tags || []).some((tg) => tg.toLowerCase().includes(filters.tag.toLowerCase())));
+  const filterTasks = (list) => {
+    let r = list;
+    if (filters.priority) r = r.filter((tk) => tk.priority === filters.priority);
+    if (filters.status) r = r.filter((tk) => (tk.status || "todo") === filters.status);
+    if (filters.tag) r = r.filter((tk) => (tk.tags || []).some((tg) => tg.toLowerCase().includes(filters.tag.toLowerCase())));
     return r;
   };
 
