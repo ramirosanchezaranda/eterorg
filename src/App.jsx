@@ -1162,7 +1162,7 @@ export default function App() {
                           <div style={{ fontSize: 10, color: t.mt, marginBottom: 6, fontFamily: sf }}>{T("typeSlash")} <span style={{ color: R, fontWeight: 600 }}>/</span> {T("forCommands")} · <span style={{ color: B }}>{T("wikiLinks")}</span> · Ctrl+Z {T("undo")} · Ctrl+Y {T("redo")}</div>
                           <textarea ref={edRef} value={currentDoc.content || ""} onChange={handleEdInput} onKeyDown={handleEdKey} placeholder={T("startWriting")} style={{ width: "100%", minHeight: 440, borderRadius: 12, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: 18, fontFamily: sf, fontSize: 13, lineHeight: 1.8, resize: "vertical" }} />
                         </div>
-                      : <div style={{ lineHeight: 1.75, minHeight: 280 }}>{renderMd(currentDoc.content)}</div>}
+                      : <div onClick={() => setEditingDoc(true)} style={{ lineHeight: 1.75, minHeight: 280, cursor: "text" }}>{renderMd(currentDoc.content)}</div>}
                     {/* ── Dictation Panel (/iavoz) — Whisper AI ── */}
                     {dictPanel.open && (
                       <div className="glass-bar fi" style={{ marginTop: 16, padding: "18px 20px", borderRadius: 16, border: `1px solid ${isRecording ? `${R}40` : t.glassBd}`, background: t.glass, boxShadow: isRecording ? `0 0 20px ${R}15` : "0 2px 12px rgba(0,0,0,.06)" }}>
