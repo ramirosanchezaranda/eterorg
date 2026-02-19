@@ -63,6 +63,7 @@ export const SLASH = [
   { cmd: "brainstorm", lk: "slashBrainstorm", ic: "💡", ai: true },
   { cmd: "summarize", lk: "slashSummarize", ic: "📋", ai: true },
   { cmd: "continue", lk: "slashContinue", ic: "▸▸", ai: "continue" },
+  { cmd: "iavoz", lk: "slashVoice", ic: "🎙", voice: true },
 ];
 
 /* ═══════ INITIAL DOCS DATA ═══════ */

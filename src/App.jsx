@@ -11,6 +11,7 @@ import {
   Plus, Trash, FileT, Fold, PlayI, TimerI, SideI, MoonI, SunI, ResetI,
   Sparkle, LinkI, XI, ArrowR, SearchI, Star, Board, TableI, HistI,
   CalI, GallI, UpI, CopyI, DlI, FilterI, BellI, HelpI, KeyI,
+  MicI, SkipI, EditI, ExportI, ImportI, FolderOpenI,
 } from "./components/icons";
 
 /* ── UI primitives ── */
@@ -31,13 +32,15 @@ const SlashMenu = lazy(() => import("./components/modals/SlashMenu"));
 const HelpModal = lazy(() => import("./components/modals/HelpModal"));
 const AiSetupModal = lazy(() => import("./components/modals/AiSetupModal"));
 const AiWriteModal = lazy(() => import("./components/modals/AiWriteModal"));
+const TimerEditModal = lazy(() => import("./components/modals/TimerEditModal"));
 const CalendarView = lazy(() => import("./components/views/CalendarView"));
 const GalleryView = lazy(() => import("./components/views/GalleryView"));
 import DocTree from "./components/views/DocTree";
 
 /* ── Services ── */
-import { genTasks, genContent, setGroqKey, getGroqKey } from "./services/ai";
+import { genTasks, genContent, transcribeAudio, setGroqKey, getGroqKey } from "./services/ai";
 import { db } from "./services/db";
+import * as fs from "./services/filesystem";
 
 /* ═══════════════════════════════════════════════════
    ██████  MAIN APP  ██████
@@ -120,11 +123,13 @@ export default function App() {
   }, []);
 
   /* ═══════ TASKS ═══════ */
-  const mkTask = (name, min, prio = "P2", tags = [], assignee = "", fromDoc = null, dueDate = "", extraSec = 0) => {
+  const mkTask = (name, min, prio = "P2", tags = [], assignee = "", fromDoc = null, dueDate = "", extraSec = 0, opts = {}) => {
     const totalSec = min * 60 + extraSec;
     return {
       id: uid(), name, minutes: min, seconds: extraSec, totalSeconds: totalSec, remaining: totalSec, running: false, done: false, fromDoc,
       priority: prio, tags, assignee, dueDate, dueTime: "", status: "todo", subtasks: [], relatedDocs: [], reminder: null,
+      endAction: opts.endAction || "stop", soundOnEnd: opts.soundOnEnd !== false,
+      isBreak: opts.isBreak || false,
     };
   };
   const [tasks, setTasks] = useState([]);
@@ -138,6 +143,30 @@ export default function App() {
   const volumeRef = useRef(0.5);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
+
+  /* ── Auto-advance ── */
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const autoAdvanceRef = useRef(false);
+  const [autoAdvanceTrigger, setAutoAdvanceTrigger] = useState(0);
+  useEffect(() => { autoAdvanceRef.current = autoAdvance; }, [autoAdvance]);
+
+  /* ── Timer edit modal ── */
+  const [editingTask, setEditingTask] = useState(null);
+
+  /* ── Workspace / Filesystem ── */
+  const [storageMode, setStorageMode] = useState("session"); // "session" | "disk"
+  const [fsFolderName, setFsFolderName] = useState(null);
+
+  /* ── Voice dictation (inline panel via /iavoz) — MediaRecorder + Groq Whisper ── */
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const [recordSecs, setRecordSecs] = useState(0);
+  const recTimerRef = useRef(null);
+  const [dictPanel, setDictPanel] = useState({ open: false, transcript: "", transcribing: false, stopped: false, processing: false, docType: "" });
+
+  /* ── Microbreak setting ── */
+  const [includeBreaks, setIncludeBreaks] = useState(true);
 
   /* ── Sound system (Web Audio API) ── */
   const audioCtxRef = useRef(null);
@@ -232,9 +261,15 @@ export default function App() {
   }, [getAudioCtx]);
 
   const tick = useCallback((id) => {
+    let justFinished = false;
+    let taskEndAction = "stop";
     setTasks((p) => p.map((x) => {
       if (x.id !== id) return x;
-      if (x.remaining <= 1) { clearInterval(ivs.current[id]); delete ivs.current[id]; playDoneSound(); return { ...x, remaining: 0, running: false, done: true, status: "done" }; }
+      if (x.remaining <= 1) {
+        clearInterval(ivs.current[id]); delete ivs.current[id]; playDoneSound(); justFinished = true;
+        taskEndAction = x.endAction || "stop";
+        return { ...x, remaining: 0, running: false, done: true, status: "done" };
+      }
       if (x.reminder && !x.reminder.triggered && x.remaining <= x.reminder.minutes * 60) {
         notify(`⏰ Reminder: ${x.name} — ${x.reminder.minutes}m left`, "⏰");
         playTickSound();
@@ -243,6 +278,13 @@ export default function App() {
       playTickSound();
       return { ...x, remaining: x.remaining - 1 };
     }));
+    if (justFinished) {
+      if (taskEndAction === "repeat") {
+        setTimeout(() => { resetT(id); setTimeout(() => play(id), 300); }, 800);
+      } else if (taskEndAction === "next" || autoAdvanceRef.current) {
+        setTimeout(() => setAutoAdvanceTrigger((c) => c + 1), 1200);
+      }
+    }
   }, [playTickSound, playDoneSound]);
 
   const play = (id) => {
@@ -274,6 +316,23 @@ export default function App() {
     setTasks((p) => [...p, t]);
   };
   useEffect(() => () => Object.values(ivs.current).forEach(clearInterval), []);
+
+  /* ── Auto-advance effect ── */
+  useEffect(() => {
+    if (autoAdvanceTrigger === 0) return;
+    const next = tasks.find((x) => !x.done && !x.running && x.remaining > 0);
+    if (next) {
+      play(next.id);
+      notify(`⏭️ ${next.name}`, "⏭️");
+    } else {
+      notify(T("allTasksDone"), "🏁");
+    }
+  }, [autoAdvanceTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Timer edit handler ── */
+  const saveTimerEdit = (id, updates) => {
+    setTasks((p) => p.map((x) => (x.id === id ? { ...x, ...updates } : x)));
+  };
 
   /* Auto-start scheduled tasks at their designated time (Argentina/Buenos_Aires) */
   useEffect(() => {
@@ -348,7 +407,35 @@ export default function App() {
     else notify(T("aiError"), "⚠️");
   };
   const handleAiKeySave = (key) => { setGroqKey(key); setAiSetup(false); notify(T("apiKeySaved"), "🔑"); };
-  const confirmAi = () => { if (!aiPreview) return; const nt = aiPreview.tasks.filter((x) => x.selected).map((s) => mkTask(s.name, s.minutes, s.priority || "P2", s.tags || [], "", aiPreview.docName)); setTasks((p) => [...p, ...nt]); setAiP(null); setView("timers"); notify(`${aiPreview.tasks.filter((x) => x.selected).length} ${T("tasksCreated")}`, "✨"); };
+  const confirmAi = () => {
+    if (!aiPreview) return;
+    const selected = aiPreview.tasks.filter((x) => x.selected);
+    let nt = [];
+    if (includeBreaks) {
+      let blockCount = 0;
+      selected.forEach((s, i) => {
+        nt.push(mkTask(s.name, s.minutes, s.priority || "P2", s.tags || [], "", aiPreview.docName));
+        blockCount++;
+        if (i < selected.length - 1) {
+          if (blockCount % 3 === 0) {
+            nt.push(mkTask(`☕ ${T("longBreak")}`, 15, "P3", ["break"], "", null, "", 0, { isBreak: true, endAction: "next" }));
+          } else {
+            nt.push(mkTask(`🧘 ${T("microbreak")}`, 5, "P3", ["break"], "", null, "", 0, { isBreak: true, endAction: "next" }));
+          }
+        }
+      });
+    } else {
+      nt = selected.map((s) => mkTask(s.name, s.minutes, s.priority || "P2", s.tags || [], "", aiPreview.docName));
+    }
+    setTasks((p) => [...p, ...nt]);
+    setAiP(null);
+    setView("timers");
+    const breakCount = nt.filter((x) => x.isBreak).length;
+    const msg = includeBreaks && breakCount > 0
+      ? `${selected.length} ${T("tasksCreated")} + ${breakCount} ${T("breaksInserted")}`
+      : `${selected.length} ${T("tasksCreated")}`;
+    notify(msg, "✨");
+  };
 
   const saveHistory = () => { if (!currentDoc) return; updateDoc(currentDoc.id, { history: [...(currentDoc.history || []).slice(-19), { date: now(), content: currentDoc.content || "" }] }); };
 
@@ -365,6 +452,13 @@ export default function App() {
   const handleSlashSel = (cmd) => {
     if (!currentDoc) return;
     const c = currentDoc.content || ""; const li = c.lastIndexOf("/"); const before = li >= 0 ? c.slice(0, li) : c; const after = li >= 0 ? c.slice(li + 1 + slashQ.length) : "";
+    if (cmd.voice) {
+      // Remove the slash text first then start dictation panel
+      updateDoc(currentDoc.id, { content: before + after });
+      setSlashOpen(false);
+      startDictation();
+      return;
+    }
     if (cmd.ai) {
       // Remove the slash text first
       updateDoc(currentDoc.id, { content: before + after });
@@ -402,6 +496,123 @@ export default function App() {
 
   const favDocs = useMemo(() => favs.map((id) => findDoc(docs, id)).filter(Boolean), [favs, docs]);
   const recentDocs = useMemo(() => recent.map((id) => findDoc(docs, id)).filter(Boolean), [recent, docs]);
+
+  /* ── Workspace: Filesystem ── */
+  const handlePickFolder = async () => {
+    if (!fs.isSupported()) { notify(T("fsNotSupported"), "⚠️"); return; }
+    const name = await fs.pickFolder();
+    if (name) { setFsFolderName(name); setStorageMode("disk"); notify(`📁 ${name}`, "✅"); }
+    else notify(T("fsPermDenied"), "⚠️");
+  };
+
+  /* ── Export / Import project ── */
+  const exportProject = () => {
+    const bundle = fs.exportProjectBundle(tasks, docs, { userName, userRole, darkMode: dk, lang, favs, recent, autoAdvance, includeBreaks });
+    downloadFile("eterorg-project.json", bundle, "application/json");
+    notify(T("projectExported"), "📦");
+  };
+  const importProjectRef = useRef(null);
+  const handleImportProject = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = fs.parseImportBundle(e.target.result);
+      if (!data) { notify(T("importError"), "⚠️"); return; }
+      // Import with new IDs to avoid collisions
+      const idMap = {};
+      const newTasks = (data.tasks || []).map((t) => { const newId = uid(); idMap[t.id] = newId; return { ...t, id: newId, running: false }; });
+      const remapDocs = (nodes) => nodes.map((n) => { const newId = uid(); idMap[n.id] = newId; return { ...n, id: newId, children: n.children ? remapDocs(n.children) : n.children }; });
+      const newDocs = remapDocs(data.docs || []);
+      setTasks((p) => [...p, ...newTasks]);
+      setDocs((p) => [...p, ...newDocs]);
+      notify(T("projectImported"), "📦");
+    };
+    reader.readAsText(file);
+  };
+
+  /* ── Voice dictation (/iavoz) — MediaRecorder + Groq Whisper ── */
+  const startDictation = async () => {
+    if (!getGroqKey()) { setAiSetup(true); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Stop any existing recorder
+      if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
+        mediaRecRef.current.stop();
+      }
+      audioChunksRef.current = [];
+      setRecordSecs(0);
+      setDictPanel({ open: true, transcript: "", transcribing: false, stopped: false, processing: false, docType: "" });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        clearInterval(recTimerRef.current);
+        if (audioChunksRef.current.length === 0) {
+          setDictPanel((p) => ({ ...p, stopped: true }));
+          return;
+        }
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setDictPanel((p) => ({ ...p, transcribing: true }));
+        const result = await transcribeAudio(blob, lang);
+        if (result.error === "NO_KEY") { closeDictPanel(); setAiSetup(true); return; }
+        if (result.error) { notify(T("whisperError"), "⚠️"); setDictPanel((p) => ({ ...p, transcribing: false, stopped: true })); return; }
+        setDictPanel((p) => ({ ...p, transcript: result.text || "", transcribing: false, stopped: true }));
+      };
+      recorder.start(1000); // collect chunks every 1s
+      mediaRecRef.current = recorder;
+      setIsRecording(true);
+      recTimerRef.current = setInterval(() => setRecordSecs((s) => s + 1), 1000);
+      notify(T("recording"), "🎙️");
+    } catch (e) {
+      console.error("Mic error:", e);
+      notify(T("micPermDenied"), "⚠️");
+    }
+  };
+  const stopDictation = () => {
+    if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
+      mediaRecRef.current.stop();
+    }
+    setIsRecording(false);
+    clearInterval(recTimerRef.current);
+  };
+  const closeDictPanel = () => {
+    if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
+      mediaRecRef.current.stop();
+    }
+    setIsRecording(false);
+    clearInterval(recTimerRef.current);
+    setDictPanel({ open: false, transcript: "", transcribing: false, stopped: false, processing: false, docType: "" });
+  };
+  const insertRawTranscript = () => {
+    if (!currentDoc || !dictPanel.transcript.trim()) return;
+    pushUndo(currentDoc.content || "");
+    updateDoc(currentDoc.id, { content: (currentDoc.content || "") + "\n\n" + dictPanel.transcript.trim() });
+    closeDictPanel();
+    edRef.current?.focus();
+    notify("✅", "🎙️");
+  };
+  const processDictWithAi = async (docType) => {
+    if (!currentDoc || !dictPanel.transcript.trim()) return;
+    if (!getGroqKey()) { closeDictPanel(); setAiSetup(true); return; }
+    setDictPanel((p) => ({ ...p, processing: true, docType }));
+    const typePrompts = {
+      prd: `Transform the following voice transcription into a well-structured Product Requirements Document (PRD). Use proper markdown with headings, bullet points, tables where appropriate. Organize the ideas logically into sections like Overview, Goals, Scope, Requirements, Timeline, etc.`,
+      brainstorm: `Organize the following voice transcription into a structured brainstorm document. Group related ideas together, use bullet lists, highlight key themes, and add any logical connections between ideas.`,
+      summary: `Create a concise, structured summary from the following voice transcription. Use clear headings and bullet points to organize the key points.`,
+      draft: `Transform the following voice transcription into a well-written draft document. Clean up the language, organize the content logically, and use proper markdown formatting.`,
+      free: `Clean up and organize the following voice transcription into a well-structured document. Maintain the original intent and ideas but improve clarity and formatting with markdown.`,
+    };
+    const prompt = typePrompts[docType] || typePrompts.free;
+    const result = await genContent(prompt + "\n\nTranscription:\n" + dictPanel.transcript.trim(), currentDoc.content, lang);
+    if (result === "NO_KEY") { closeDictPanel(); setAiSetup(true); return; }
+    if (!result) { notify(T("aiWriteError"), "⚠️"); setDictPanel((p) => ({ ...p, processing: false })); return; }
+    pushUndo(currentDoc.content || "");
+    updateDoc(currentDoc.id, { content: (currentDoc.content || "") + "\n\n" + result });
+    closeDictPanel();
+    edRef.current?.focus();
+    notify("✨ AI", "✦");
+  };
+
   const filteredTasks = useMemo(() => {
     const arToday = todayAR();
     const arTime = nowAR_HM();
@@ -458,6 +669,8 @@ export default function App() {
         if (savedSettings.recent) setRecent(savedSettings.recent);
         if (savedSettings.muted) setMuted(true);
         if (savedSettings.volume !== undefined) { setVolume(savedSettings.volume); volumeRef.current = savedSettings.volume; }
+        if (savedSettings.autoAdvance) setAutoAdvance(true);
+        if (savedSettings.includeBreaks !== undefined) setIncludeBreaks(savedSettings.includeBreaks);
       }
       setDbReady(true);
     })();
@@ -484,10 +697,24 @@ export default function App() {
       db.saveSettings({
         id: "default", userName, userRole,
         darkMode: dk, lang, onboarded, favs, recent, muted, volume,
+        autoAdvance, includeBreaks,
       });
     }, 600);
     return () => clearTimeout(timer);
-  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, dbReady]);
+  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, autoAdvance, includeBreaks, dbReady]);
+
+  // Auto-save to filesystem (when disk mode active)
+  useEffect(() => {
+    if (!dbReady || storageMode !== "disk" || !fs.hasFolder()) return;
+    const timer = setTimeout(async () => {
+      const slug = userName?.toLowerCase().replace(/\s+/g, "-") || "default";
+      const prd = currentDoc?.content || "";
+      const project = { tasks, docs, settings: { userName, userRole, dk, lang, favs, recent, autoAdvance, includeBreaks } };
+      const ok = await fs.saveProject(slug, prd, project);
+      if (!ok) { setStorageMode("session"); notify(T("fsPermDenied"), "⚠️"); }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [tasks, docs, storageMode, dbReady]);
 
   const STab = ({ icon, label, active, onClick, badge }) => (
     <button onClick={onClick} title={isMini ? label : undefined} style={{ display: "flex", alignItems: "center", justifyContent: isMini ? "center" : "flex-start", gap: isMini ? 0 : 8, width: "100%", padding: isMini ? "8px 0" : "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: sf, color: active ? t.fg : t.mt, background: active ? t.at : "transparent", transition: "all .12s", position: "relative" }}>
@@ -572,8 +799,10 @@ export default function App() {
       <Suspense fallback={null}><HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} t={t} T={T} /></Suspense>
       <Suspense fallback={null}><AiSetupModal open={aiSetup} onClose={() => setAiSetup(false)} onSave={handleAiKeySave} hasKey={!!getGroqKey()} t={t} T={T} /></Suspense>
       <Suspense fallback={null}><AiWriteModal open={aiWrite.open} mode={aiWrite.mode} onClose={() => setAiWrite({ open: false, mode: "ai" })} onSubmit={handleAiWrite} loading={aiWriting} t={t} T={T} /></Suspense>
+      {editingTask && <Suspense fallback={null}><TimerEditModal task={editingTask} onSave={saveTimerEdit} onClose={() => setEditingTask(null)} t={t} T={T} /></Suspense>}
       {slashOpen && <Suspense fallback={null}><SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} /></Suspense>}
       <input ref={importRef} type="file" accept=".md,.txt" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) importDoc(e.target.files[0]); e.target.value = ""; }} />
+      <input ref={importProjectRef} type="file" accept=".json" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) handleImportProject(e.target.files[0]); e.target.value = ""; }} />
 
       {/* ═══ SIDEBAR ═══ */}
       <div style={{ width: sbW, minWidth: sbW, background: t.sb, borderRight: sbMode !== "closed" ? `1px solid ${t.bd}` : "none", display: "flex", flexDirection: "column", transition: "all .25s cubic-bezier(.4,0,.2,1)", overflow: "hidden" }}>
@@ -651,7 +880,31 @@ export default function App() {
 
             {/* ═══ TIMERS ═══ */}
             {view === "timers" && <div className="fi">
-              <div style={{ marginBottom: 24 }}><p style={{ fontSize: 12, color: t.mt, marginBottom: 3 }}>{greeting}{userName ? `, ${userName}` : ""} 👋</p><h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em" }}>{T("timers")}</h2><p style={{ fontSize: 11, color: t.mt, marginTop: 4, fontFamily: sf }}>{tasks.filter((x) => x.done).length}/{tasks.length} {T("completed")}</p></div>
+              <div style={{ marginBottom: 24 }}>
+                <p style={{ fontSize: 12, color: t.mt, marginBottom: 3 }}>{greeting}{userName ? `, ${userName}` : ""} 👋</p>
+                <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em" }}>{T("timers")}</h2>
+                <p style={{ fontSize: 11, color: t.mt, marginTop: 4, fontFamily: sf }}>{tasks.filter((x) => x.done).length}/{tasks.length} {T("completed")}</p>
+                {/* ── Controls bar ── */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                  {/* Auto-advance */}
+                  <button onClick={() => setAutoAdvance(!autoAdvance)} title={T("autoAdvanceDesc")} style={{ height: 28, padding: "0 10px", borderRadius: 8, border: autoAdvance ? `1.5px solid ${G}` : `1px solid ${t.bd}`, background: autoAdvance ? `${G}15` : "transparent", color: autoAdvance ? G : t.mt, cursor: "pointer", fontFamily: sf, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                    <SkipI s={10} /> {T("autoAdvance")} {autoAdvance ? "ON" : "OFF"}
+                  </button>
+                  {/* Include breaks */}
+                  <button onClick={() => setIncludeBreaks(!includeBreaks)} title={T("breakAfterBlock")} style={{ height: 28, padding: "0 10px", borderRadius: 8, border: includeBreaks ? `1.5px solid ${B}` : `1px solid ${t.bd}`, background: includeBreaks ? `${B}15` : "transparent", color: includeBreaks ? B : t.mt, cursor: "pointer", fontFamily: sf, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                    🧘 {T("includeBreaks")} {includeBreaks ? "ON" : "OFF"}
+                  </button>
+                  {/* Export / Import */}
+                  <button onClick={exportProject} title={T("exportProject")} style={{ ...tB(t), height: 28, padding: "0 8px", borderRadius: 8 }}><ExportI s={10} /></button>
+                  <button onClick={() => importProjectRef.current?.click()} title={T("importProject")} style={{ ...tB(t), height: 28, padding: "0 8px", borderRadius: 8 }}><ImportI s={10} /></button>
+                  {/* Filesystem */}
+                  {fs.isSupported() && (
+                    <button onClick={handlePickFolder} title={fsFolderName ? `${T("fsActive")}: ${fsFolderName}` : T("chooseFolder")} style={{ height: 28, padding: "0 10px", borderRadius: 8, border: storageMode === "disk" ? `1.5px solid ${G}` : `1px solid ${t.bd}`, background: storageMode === "disk" ? `${G}15` : "transparent", color: storageMode === "disk" ? G : t.mt, cursor: "pointer", fontFamily: sf, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                      <FolderOpenI s={10} /> {storageMode === "disk" ? fsFolderName : T("diskMode")}
+                    </button>
+                  )}
+                </div>
+              </div>
               <FilterBar filters={filters} setFilters={setFilters} t={t} T={T} />
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {filteredTasks.length === 0 && !showAdd && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240 }}><div className="glass-bar" style={{ textAlign: "center", padding: "36px 44px", borderRadius: 24, background: t.glass, border: `1px solid ${t.glassBd}`, boxShadow: "0 4px 24px rgba(0,0,0,.08)", maxWidth: 340 }}><div style={{ width: 52, height: 52, borderRadius: 14, background: t.glassHi, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><TimerI s={22} c={t.mt} /></div><div style={{ fontSize: 15, fontWeight: 700, color: t.fg, fontFamily: sf, marginBottom: 5, letterSpacing: "-0.02em" }}>{T("timersEmpty")}</div><div style={{ fontSize: 12, color: t.mt, fontFamily: sf, lineHeight: 1.6, marginBottom: 16 }}>{T("timersEmptyDesc")}</div><button onClick={() => setShowAdd(true)} className="glass-btn" style={{ height: 34, padding: "0 18px", borderRadius: 10, border: "none", background: G, color: "#fff", cursor: "pointer", fontFamily: sf, fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, boxShadow: `0 2px 8px ${G}40` }}><Plus s={12} />{T("addTask")}</button></div></div>}
@@ -672,7 +925,7 @@ export default function App() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
                             <div>
-                              <h3 style={{ fontSize: 14, fontWeight: 600, textDecoration: task.done ? "line-through" : "none" }}>{task.name}</h3>
+                              <h3 style={{ fontSize: 14, fontWeight: 600, textDecoration: task.done ? "line-through" : "none" }}>{task.name}{task.isBreak && <span style={{ fontSize: 9, marginLeft: 6, padding: "1px 6px", borderRadius: 4, background: `${B}18`, color: B, fontWeight: 500, verticalAlign: "middle" }}>{T("microbreak")}</span>}</h3>
                               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3, flexWrap: "wrap" }}>
                                 <span style={pill(pr.c)}>{task.priority}</span>
                                 <span style={{ fontSize: 10, fontFamily: sf, color: t.mt }}>{fmtDur(task.totalSeconds || task.minutes * 60)}</span>
@@ -685,6 +938,7 @@ export default function App() {
                             </div>
                             <div style={{ display: "flex", gap: 3 }}>
                               <select value="" onChange={(e) => { if (e.target.value === "5" || e.target.value === "10" || e.target.value === "15") setReminder(task.id, +e.target.value); if (e.target.value === "clear") setReminder(task.id, null); }} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${t.bd}`, background: "transparent", color: t.mt, cursor: "pointer", fontSize: 10, opacity: .6, appearance: "none", textAlign: "center", padding: 0, backgroundImage: "none" }} title={T("setReminder")}><option value="">🔔</option><option value="5">5m</option><option value="10">10m</option><option value="15">15m</option><option value="clear">{T("clear")}</option></select>
+                              <button onClick={() => setEditingTask(task)} style={{ ...sB(t), width: 28, height: 28 }} title={T("editTimer")}><EditI s={11} /></button>
                               <button onClick={() => resetT(task.id)} style={{ ...sB(t), width: 28, height: 28 }}><ResetI s={11} /></button>
                               <button onClick={() => removeT(task.id)} style={{ ...sB(t), width: 28, height: 28 }}><Trash s={11} /></button>
                             </div>
@@ -824,6 +1078,78 @@ export default function App() {
                           <textarea ref={edRef} value={currentDoc.content || ""} onChange={handleEdInput} onKeyDown={handleEdKey} placeholder={T("startWriting")} style={{ width: "100%", minHeight: 440, borderRadius: 12, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: 18, fontFamily: sf, fontSize: 13, lineHeight: 1.8, resize: "vertical" }} />
                         </div>
                       : <div style={{ lineHeight: 1.75, minHeight: 280 }}>{renderMd(currentDoc.content)}</div>}
+                    {/* ── Dictation Panel (/iavoz) — Whisper AI ── */}
+                    {dictPanel.open && (
+                      <div className="glass-bar fi" style={{ marginTop: 16, padding: "18px 20px", borderRadius: 16, border: `1px solid ${isRecording ? `${R}40` : t.glassBd}`, background: t.glass, boxShadow: isRecording ? `0 0 20px ${R}15` : "0 2px 12px rgba(0,0,0,.06)" }}>
+                        {/* Header */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: isRecording ? `${R}18` : dictPanel.transcribing ? `${O}18` : `${G}18`, display: "flex", alignItems: "center", justifyContent: "center", animation: isRecording ? "pulse 1.5s infinite" : "none" }}>
+                              <MicI s={13} c={isRecording ? R : dictPanel.transcribing ? O : G} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: sf, letterSpacing: "-0.02em" }}>{T("voiceTitle")}</div>
+                              <div style={{ fontSize: 10, color: isRecording ? R : dictPanel.transcribing ? O : G, fontFamily: sf, fontWeight: 600 }}>
+                                {isRecording ? `${T("voiceRecording")} (${Math.floor(recordSecs / 60)}:${String(recordSecs % 60).padStart(2, "0")})` : dictPanel.transcribing ? T("voiceTranscribing") : dictPanel.stopped ? T("voiceStopped") : ""}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {isRecording && <button onClick={stopDictation} style={{ height: 28, padding: "0 12px", borderRadius: 8, border: "none", background: R, color: "#fff", cursor: "pointer", fontFamily: sf, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>⏹ {T("stopDictation")}</button>}
+                            {!isRecording && dictPanel.stopped && !dictPanel.transcribing && <button onClick={startDictation} style={{ height: 28, padding: "0 12px", borderRadius: 8, border: `1px solid ${t.bd}`, background: "transparent", color: t.fg, cursor: "pointer", fontFamily: sf, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><MicI s={9} /> {T("dictate")}</button>}
+                            <button onClick={closeDictPanel} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${t.bd}`, background: "transparent", color: t.mt, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>×</button>
+                          </div>
+                        </div>
+                        {/* Recording waveform indicator */}
+                        {isRecording && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, height: 40, marginBottom: 12 }}>
+                            {[...Array(12)].map((_, i) => (
+                              <div key={i} style={{ width: 3, borderRadius: 2, background: R, animation: `waveBar .8s ease-in-out ${i * 0.07}s infinite alternate`, height: 8 }} />
+                            ))}
+                          </div>
+                        )}
+                        {/* Transcribing indicator */}
+                        {dictPanel.transcribing && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "16px 0", marginBottom: 12 }}>
+                            <div style={{ width: 16, height: 16, border: `2.5px solid ${O}44`, borderTopColor: O, borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+                            <span style={{ fontSize: 12, color: O, fontFamily: sf, fontWeight: 600 }}>{T("voiceTranscribing")}</span>
+                          </div>
+                        )}
+                        {/* Transcript area — shown when stopped */}
+                        {dictPanel.stopped && !dictPanel.transcribing && (
+                          <div style={{ minHeight: 60, maxHeight: 240, overflowY: "auto", padding: 14, borderRadius: 10, background: t.inp, border: `1px solid ${t.bd}`, marginBottom: 12, fontFamily: sf, fontSize: 13, lineHeight: 1.7, color: t.fg }}>
+                            {dictPanel.transcript ? (
+                              <span>{dictPanel.transcript}</span>
+                            ) : (
+                              <span style={{ color: t.mt, fontStyle: "italic" }}>{T("voiceEmpty")}</span>
+                            )}
+                          </div>
+                        )}
+                        {/* Actions — only when stopped with content */}
+                        {dictPanel.stopped && dictPanel.transcript.trim() && !dictPanel.processing && !dictPanel.transcribing && (
+                          <div>
+                            <div style={{ fontSize: 11, color: t.mt, fontFamily: sf, marginBottom: 8, fontWeight: 600 }}>{T("voicePromptLabel")}</div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <button onClick={insertRawTranscript} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: `1px solid ${t.bd}`, background: "transparent", color: t.fg, cursor: "pointer", fontFamily: sf, fontSize: 11, fontWeight: 500 }}>{T("voiceInsertRaw")}</button>
+                              {[{ k: "prd", lk: "voicePromptPrd", bg: R }, { k: "brainstorm", lk: "voicePromptBrainstorm", bg: "#8B5CF6" }, { k: "summary", lk: "voicePromptSummary", bg: B }, { k: "draft", lk: "voicePromptDraft", bg: O }, { k: "free", lk: "voicePromptFree", bg: G }].map((opt) => (
+                                <button key={opt.k} onClick={() => processDictWithAi(opt.k)} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "none", background: opt.bg, color: "#fff", cursor: "pointer", fontFamily: sf, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>✦ {T(opt.lk)}</button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Processing indicator */}
+                        {dictPanel.processing && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0" }}>
+                            <div style={{ width: 14, height: 14, border: `2px solid ${R}44`, borderTopColor: R, borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+                            <span style={{ fontSize: 12, color: R, fontFamily: sf, fontWeight: 600 }}>{T("voiceProcessing")}</span>
+                          </div>
+                        )}
+                        {/* Whisper badge */}
+                        <div style={{ marginTop: 8, textAlign: "right" }}>
+                          <span style={{ fontSize: 9, color: t.mt, fontFamily: sf, opacity: 0.6 }}>🤖 {T("whisperPowered")}</span>
+                        </div>
+                      </div>
+                    )}
                     {!editingDoc && currentDoc.content && (
                       <div className="glass-bar" style={{ marginTop: 28, padding: "16px 20px", borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.glass, display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 12px rgba(0,0,0,.06)" }}>
                         <div><div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2, fontFamily: sf, letterSpacing: "-0.02em" }}>{T("readyToExecute")}</div><div style={{ fontSize: 11, color: t.mt, fontFamily: sf }}>{T("generateTimedTasks")}</div></div>

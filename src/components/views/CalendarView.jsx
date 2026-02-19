@@ -1,12 +1,13 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { ChevR, CalI, Plus, XI, PlayI, Trash } from "../icons";
+import { ChevR, CalI, Plus, XI, PlayI, Trash, Grip } from "../icons";
 import { sB, tB } from "../ui/styles";
 import { PRIOS, STC } from "../../constants";
 import { G, R, B, Y, sf } from "../../constants/theme";
-import { today, fmtDur, nowAR_HM } from "../../utils";
+import { today, fmtDur, nowAR_HM, fmt } from "../../utils";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const AR_TZ = "America/Argentina/Buenos_Aires";
+const HOUR_H = 64; /* px height per hour row in day view */
 
 /* Get current hour & minute in Argentina */
 const arNow = () => {
@@ -26,6 +27,8 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
   const [cPrio, setCPrio] = useState("P2");
   const [cHour, setCHour] = useState(0);
   const [cMinute, setCMinute] = useState(0);
+  /* Drag-and-drop rescheduling */
+  const [dragTaskId, setDragTaskId] = useState(null);
   /* AR clock */
   const [arTime, setArTime] = useState(arNow);
   useEffect(() => { const iv = setInterval(() => setArTime(arNow()), 30000); return () => clearInterval(iv); }, []);
@@ -59,6 +62,16 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
       map[h].push(tk);
     });
     return map;
+  }, [dayTasks]);
+
+  /* Compute positioned blocks for the timeline overlay */
+  const timeBlocks = useMemo(() => {
+    return dayTasks.filter((tk) => tk.dueTime).map((tk) => {
+      const [hh, mm] = tk.dueTime.split(":").map(Number);
+      const startMin = hh * 60 + (mm || 0);
+      const durMin = Math.max(5, (tk.totalSeconds || tk.minutes * 60) / 60); // min 5 min visual
+      return { ...tk, startMin, durMin };
+    });
   }, [dayTasks]);
 
   const unscheduled = useMemo(() => dayTasks.filter((tk) => !tk.dueTime), [dayTasks]);
@@ -154,6 +167,13 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
   }
 
   /* ═══ DAY VIEW ═══ */
+  const handleDropOnHour = (h) => {
+    if (!dragTaskId || !selectedDay) return;
+    const timeStr = fmtTime(h, 0);
+    onSchedule(dragTaskId, selectedDay, timeStr);
+    setDragTaskId(null);
+  };
+
   return (
     <div className="fi">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -172,16 +192,20 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
       </div>
 
       <div style={{ display: "flex", gap: 16 }}>
-        {/* Timeline */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Timeline with duration blocks */}
+        <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+          {/* Hour grid rows */}
           {HOURS.map((h) => {
-            const hourTasks = byHour[h] || [];
             const isNowHour = selectedDay === todayStr && h === arTime.h;
             const isCreating = createAt && createAt.hour === h;
             return (
               <div key={h}>
-                <div onClick={() => !isCreating && handleHourClick(h)}
-                  style={{ display: "flex", minHeight: hourTasks.length ? 44 + hourTasks.length * 40 : 44, borderBottom: `1px solid ${t.bd}`, cursor: isCreating ? "default" : "pointer", position: "relative", transition: "background .1s" }}
+                <div
+                  onClick={() => !isCreating && handleHourClick(h)}
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = `${B}08`; }}
+                  onDragLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  onDrop={(e) => { e.preventDefault(); e.currentTarget.style.background = "transparent"; handleDropOnHour(h); }}
+                  style={{ display: "flex", minHeight: HOUR_H, borderBottom: `1px solid ${t.bd}`, cursor: isCreating ? "default" : "pointer", position: "relative", transition: "background .1s" }}
                   onMouseEnter={(e) => { if (!isCreating) e.currentTarget.style.background = t.hv; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                 >
@@ -189,36 +213,76 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
                     {fmtHour(h)}
                   </div>
                   {isNowHour && (
-                    <div style={{ position: "absolute", left: 60, right: 0, top: `${(arTime.m / 60) * 100}%`, height: 2, background: B, zIndex: 2, borderRadius: 1 }}>
+                    <div style={{ position: "absolute", left: 60, right: 0, top: `${(arTime.m / 60) * 100}%`, height: 2, background: B, zIndex: 5, borderRadius: 1 }}>
                       <div style={{ position: "absolute", left: -4, top: -3, width: 8, height: 8, borderRadius: "50%", background: B }} />
                     </div>
                   )}
-                  <div style={{ flex: 1, padding: "6px 0 6px 10px", borderLeft: `2px solid ${isNowHour ? B : t.bd}`, display: "flex", flexDirection: "column", gap: 4 }}>
-                    {hourTasks.map((tk) => {
-                      const pr = PRIOS.find((p) => p.k === tk.priority) || PRIOS[2];
+                  <div style={{ flex: 1, padding: "6px 0 6px 10px", borderLeft: `2px solid ${isNowHour ? B : t.bd}`, position: "relative" }}>
+                    {/* Duration blocks for tasks starting this hour */}
+                    {timeBlocks.filter((b) => Math.floor(b.startMin / 60) === h).map((blk) => {
+                      const pr = PRIOS.find((p) => p.k === blk.priority) || PRIOS[2];
+                      const startOffset = (blk.startMin % 60) / 60; // fraction within the hour
+                      const durHours = blk.durMin / 60;
+                      const blockH = Math.max(28, durHours * HOUR_H); // min 28px height
                       return (
-                        <div key={tk.id} onClick={(e) => e.stopPropagation()} className="glass-bar"
-                          style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 10, background: `${pr.c}10`, border: `1px solid ${pr.c}25`, cursor: "default" }}>
-                          <div style={{ width: 4, height: 28, borderRadius: 2, background: pr.c, flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, fontFamily: sf, color: t.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tk.name}</div>
-                            <div style={{ fontSize: 10, color: t.mt, fontFamily: sf }}>
-                              {tk.dueTime} · {fmtDur(tk.totalSeconds || tk.minutes * 60)} · <span style={{ color: STC[tk.status || "todo"] }}>{T(tk.status === "done" ? "done" : tk.status === "progress" ? "inProgress" : "toDo")}</span>
+                        <div
+                          key={blk.id}
+                          draggable
+                          onDragStart={(e) => { e.stopPropagation(); setDragTaskId(blk.id); }}
+                          onDragEnd={() => setDragTaskId(null)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="glass-bar"
+                          style={{
+                            position: "absolute",
+                            top: startOffset * HOUR_H,
+                            left: 4,
+                            right: 8,
+                            height: blockH,
+                            borderRadius: 10,
+                            background: `${pr.c}12`,
+                            border: `1px solid ${pr.c}30`,
+                            padding: "6px 10px",
+                            cursor: "grab",
+                            zIndex: 3,
+                            overflow: "hidden",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "center",
+                            transition: "box-shadow .15s",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 2px 12px ${pr.c}25`; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 4, height: Math.min(28, blockH - 12), borderRadius: 2, background: pr.c, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, fontFamily: sf, color: t.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {blk.name}
+                              </div>
+                              {blockH >= 40 && (
+                                <div style={{ fontSize: 10, color: t.mt, fontFamily: sf, display: "flex", alignItems: "center", gap: 4 }}>
+                                  {blk.dueTime} · {fmtDur(blk.totalSeconds || blk.minutes * 60)}
+                                  {blk.remaining !== undefined && blk.remaining < (blk.totalSeconds || blk.minutes * 60) && (
+                                    <span style={{ color: blk.running ? Y : blk.done ? G : t.mt }}>({fmt(blk.remaining)})</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                            {!tk.done && !tk.running && <button onClick={(e) => { e.stopPropagation(); play(tk.id); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, background: `${G}18`, color: G }} title={T("play")}><PlayI s={10} /></button>}
-                            {tk.running && <button onClick={(e) => { e.stopPropagation(); pause(tk.id); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, background: `${Y}18`, color: Y }} title={T("pause")}>❚</button>}
-                            {!tk.done && <button onClick={(e) => { e.stopPropagation(); markDone(tk.id); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, background: `${G}18`, color: G }} title={T("done")}>✓</button>}
-                            <button onClick={(e) => { e.stopPropagation(); onUnschedule(tk.id); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 6 }} title={T("unschedule")}>
-                              <XI s={9} />
-                            </button>
+                            <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                              {!blk.done && !blk.running && <button onClick={(e) => { e.stopPropagation(); play(blk.id); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 5, background: `${G}18`, color: G }} title={T("play")}><PlayI s={9} /></button>}
+                              {blk.running && <button onClick={(e) => { e.stopPropagation(); pause(blk.id); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 5, background: `${Y}18`, color: Y }} title={T("pause")}>❚</button>}
+                              {!blk.done && <button onClick={(e) => { e.stopPropagation(); markDone(blk.id); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 5, background: `${G}18`, color: G }} title={T("done")}>✓</button>}
+                              <button onClick={(e) => { e.stopPropagation(); onUnschedule(blk.id); }} style={{ ...tB(t), width: 20, height: 20, borderRadius: 5 }} title={T("unschedule")}>
+                                <XI s={8} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
-                    {hourTasks.length === 0 && !isCreating && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, opacity: 0 }} className="hour-plus">
+                    {/* "+" hint when no blocks this hour */}
+                    {!timeBlocks.some((b) => Math.floor(b.startMin / 60) === h) && !isCreating && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, opacity: 0, paddingTop: 4 }} className="hour-plus">
                         <Plus s={10} c={t.mt} /><span style={{ fontSize: 10, color: t.mt, fontFamily: sf }}>{T("createInCalendar")}</span>
                       </div>
                     )}
@@ -275,7 +339,7 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
           })}
         </div>
 
-        {/* Sidebar — unscheduled tasks for this day */}
+        {/* Sidebar — unscheduled tasks for this day, draggable */}
         {window.innerWidth >= 640 && (
           <div style={{ width: 220, flexShrink: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 600, fontFamily: sf, color: t.mt, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
@@ -287,7 +351,15 @@ export default function CalendarView({ tasks, onCreateTask, onSchedule, onUnsche
                 {unscheduled.map((tk) => {
                   const pr = PRIOS.find((p) => p.k === tk.priority) || PRIOS[2];
                   return (
-                    <div key={tk.id} className="glass-bar" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 4 }}>
+                    <div
+                      key={tk.id}
+                      draggable
+                      onDragStart={() => setDragTaskId(tk.id)}
+                      onDragEnd={() => setDragTaskId(null)}
+                      className="glass-bar"
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 4, cursor: "grab" }}
+                    >
+                      <Grip s={10} c={t.mt} />
                       <div style={{ width: 4, height: 20, borderRadius: 2, background: pr.c, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, fontFamily: sf, color: t.fg, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tk.name}</div>

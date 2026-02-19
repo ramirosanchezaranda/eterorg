@@ -53,6 +53,38 @@ export async function genTasks(content, name) {
   }
 }
 
+/* ═══════ WHISPER TRANSCRIPTION ═══════ */
+export async function transcribeAudio(audioBlob, lang = "es") {
+  const key = getGroqKey();
+  if (!key) return { error: "NO_KEY" };
+  try {
+    const form = new FormData();
+    form.append("file", audioBlob, "recording.webm");
+    form.append("model", "whisper-large-v3");
+    form.append("language", lang === "es" ? "es" : "en");
+    form.append("response_format", "verbose_json");
+    form.append("prompt", lang === "es"
+      ? "Transcripción de una grabación de voz con ideas para un documento. Ignorar muletillas y pausas."
+      : "Transcription of a voice recording with ideas for a document. Ignore filler words and pauses."
+    );
+    const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}` },
+      body: form,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      console.error("Whisper error:", r.status, err);
+      return { error: "API_ERROR", detail: err };
+    }
+    const d = await r.json();
+    return { text: d.text || "", segments: d.segments || [], duration: d.duration || 0 };
+  } catch (e) {
+    console.error("Whisper exception:", e);
+    return { error: "EXCEPTION" };
+  }
+}
+
 /* ═══════ AI WRITING ═══════ */
 export async function genContent(prompt, context, lang) {
   const key = getGroqKey();
