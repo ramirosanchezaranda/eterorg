@@ -52,21 +52,21 @@ export default function App() {
   const [lang, setLang] = useState("en");
   const T = useT(lang);
   const STL = useMemo(() => ({ todo: T("toDo"), progress: T("inProgress"), done: T("done") }), [T]);
-  const [sbMode, setSbMode] = useState(() => window.innerWidth > 768 ? "open" : "closed");
+  const [sbMode, setSbMode] = useState(() => window.innerWidth > 768 ? "open" : "mini");
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   useEffect(() => {
     const onResize = () => {
       const mob = window.innerWidth <= 768;
       setIsMobile(mob);
-      if (mob) setSbMode((m) => m === "open" ? "closed" : m);
+      if (mob) setSbMode((m) => m === "open" ? "mini" : m);
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
   const isMini = sbMode === "mini";
   const sbW = sbMode === "open" ? 256 : sbMode === "mini" ? 52 : 0;
-  const toggleSb = () => setSbMode((m) => m === "open" ? (isMobile ? "closed" : "mini") : "open");
-  const selectView = (v) => { setView(v); if (isMobile) setSbMode("closed"); };
+  const toggleSb = () => setSbMode((m) => m === "open" ? "mini" : "open");
+  const selectView = (v) => { setView(v); if (isMobile) setSbMode("mini"); };
   const [view, setView] = useState("timers");
   const [searchOpen, setSearchOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -856,7 +856,7 @@ export default function App() {
   return (
     <div style={{ display: "flex", height: "100dvh", background: t.bg, color: t.fg, fontFamily: sf, transition: "background .4s,color .4s", overflow: "hidden" }}>
       {/* Mobile sidebar overlay */}
-      {isMobile && sbMode === "open" && <div className="sidebar-overlay" onClick={() => setSbMode("closed")} />}
+      {isMobile && sbMode === "open" && <div className="sidebar-overlay" onClick={() => setSbMode("mini")} />}
 
       <Toasts items={notifs} onDismiss={(id) => setNotifs((p) => p.filter((n) => n.id !== id))} t={t} />
       <Suspense fallback={null}><SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} tasks={tasks} docs={docs} setAD={(id) => { setActiveDoc(id); setEditingDoc(false); addRecent(id); }} setV={setView} t={t} T={T} /></Suspense>
