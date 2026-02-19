@@ -517,8 +517,17 @@ export default function App() {
   const handlePickFolder = async () => {
     if (!fs.isSupported()) { notify(T("fsNotSupported"), "⚠️"); return; }
     const name = await fs.pickFolder();
-    if (name) { setFsFolderName(name); setStorageMode("disk"); notify(`📁 ${name}`, "✅"); }
-    else notify(T("fsPermDenied"), "⚠️");
+    if (name) {
+      setFsFolderName(name);
+      setStorageMode("disk");
+      notify(`📁 ${name}`, "✅");
+      // Immediate first save so files appear right away
+      const slug = userName?.toLowerCase().replace(/\s+/g, "-") || "default";
+      const settings = { userName, userRole, dk, lang, favs, recent, autoAdvance, includeBreaks };
+      const project = { tasks, docs, settings };
+      const ok = await fs.saveProject(slug, "", project);
+      if (!ok) { setStorageMode("session"); setFsFolderName(null); notify(T("fsPermDenied"), "⚠️"); }
+    }
   };
 
   /* ── Export / Import project ── */
@@ -689,6 +698,21 @@ export default function App() {
         if (savedSettings.includeBreaks !== undefined) setIncludeBreaks(savedSettings.includeBreaks);
         if (savedSettings.tickEnabled !== undefined) setTickEnabled(savedSettings.tickEnabled);
         if (savedSettings.transcriptionLang) setTranscriptionLang(savedSettings.transcriptionLang);
+        // Restore filesystem mode
+        if (savedSettings.storageMode === "disk") {
+          setStorageMode("disk");
+          if (savedSettings.fsFolderName) setFsFolderName(savedSettings.fsFolderName);
+          // Try to restore the directory handle from IndexedDB
+          fs.restoreFolder().then((name) => {
+            if (name) {
+              setFsFolderName(name);
+            } else {
+              // Handle couldn't be restored (cleared or browser reset)
+              setStorageMode("session");
+              setFsFolderName(null);
+            }
+          });
+        }
       }
       setDbReady(true);
     })();
@@ -716,23 +740,24 @@ export default function App() {
         id: "default", userName, userRole,
         darkMode: dk, lang, onboarded, favs, recent, muted, volume,
         autoAdvance, includeBreaks, tickEnabled, transcriptionLang,
+        storageMode, fsFolderName,
       });
     }, 600);
     return () => clearTimeout(timer);
-  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, autoAdvance, includeBreaks, tickEnabled, transcriptionLang, dbReady]);
+  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, autoAdvance, includeBreaks, tickEnabled, transcriptionLang, storageMode, fsFolderName, dbReady]);
 
   // Auto-save to filesystem (when disk mode active)
   useEffect(() => {
     if (!dbReady || storageMode !== "disk" || !fs.hasFolder()) return;
     const timer = setTimeout(async () => {
       const slug = userName?.toLowerCase().replace(/\s+/g, "-") || "default";
-      const prd = currentDoc?.content || "";
-      const project = { tasks, docs, settings: { userName, userRole, dk, lang, favs, recent, autoAdvance, includeBreaks } };
-      const ok = await fs.saveProject(slug, prd, project);
-      if (!ok) { setStorageMode("session"); notify(T("fsPermDenied"), "⚠️"); }
+      const settings = { userName, userRole, dk, lang, favs, recent, autoAdvance, includeBreaks };
+      const project = { tasks, docs, settings };
+      const ok = await fs.saveProject(slug, "", project);
+      if (!ok) { setStorageMode("session"); setFsFolderName(null); notify(T("fsPermDenied"), "⚠️"); }
     }, 2000);
     return () => clearTimeout(timer);
-  }, [tasks, docs, storageMode, dbReady]);
+  }, [tasks, docs, userName, userRole, dk, lang, favs, recent, autoAdvance, includeBreaks, storageMode, dbReady]);
 
   const STab = ({ icon, label, active, onClick, badge }) => (
     <button onClick={onClick} title={isMini ? label : undefined} style={{ display: "flex", alignItems: "center", justifyContent: isMini ? "center" : "flex-start", gap: isMini ? 0 : 8, width: "100%", padding: isMini ? "8px 0" : "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: sf, color: active ? t.fg : t.mt, background: active ? t.at : "transparent", transition: "all .12s", position: "relative" }}>
