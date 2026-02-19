@@ -11,7 +11,7 @@ import {
   Plus, Trash, FileT, Fold, PlayI, TimerI, SideI, MoonI, SunI, ResetI,
   Sparkle, LinkI, XI, ArrowR, SearchI, Star, Board, TableI, HistI,
   CalI, GallI, UpI, CopyI, DlI, FilterI, BellI, HelpI, KeyI,
-  MicI, SkipI, EditI, ExportI, ImportI, FolderOpenI,
+  MicI, SkipI, EditI, ExportI, ImportI, FolderOpenI, GearI,
 } from "./components/icons";
 
 /* ── UI primitives ── */
@@ -33,6 +33,7 @@ const HelpModal = lazy(() => import("./components/modals/HelpModal"));
 const AiSetupModal = lazy(() => import("./components/modals/AiSetupModal"));
 const AiWriteModal = lazy(() => import("./components/modals/AiWriteModal"));
 const TimerEditModal = lazy(() => import("./components/modals/TimerEditModal"));
+const SettingsModal = lazy(() => import("./components/modals/SettingsModal"));
 const CalendarView = lazy(() => import("./components/views/CalendarView"));
 const GalleryView = lazy(() => import("./components/views/GalleryView"));
 import DocTree from "./components/views/DocTree";
@@ -61,6 +62,15 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [volPopOpen, setVolPopOpen] = useState(false);
+  const volPopRef = useRef(null);
+  useEffect(() => {
+    if (!volPopOpen) return;
+    const h = (e) => { if (volPopRef.current && !volPopRef.current.contains(e.target)) setVolPopOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [volPopOpen]);
   const [dbReady, setDbReady] = useState(false);
 
   /* ONBOARDING */
@@ -116,7 +126,7 @@ export default function App() {
     const h = (e) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) { e.preventDefault(); setSearchOpen(true); }
       if ((e.metaKey || e.ctrlKey) && (e.key === "h" || e.key === "H")) { e.preventDefault(); setHelpOpen(true); }
-      if (e.key === "Escape") { setSearchOpen(false); setHelpOpen(false); }
+      if (e.key === "Escape") { setSearchOpen(false); setHelpOpen(false); setSettingsOpen(false); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -168,6 +178,12 @@ export default function App() {
   /* ── Microbreak setting ── */
   const [includeBreaks, setIncludeBreaks] = useState(true);
 
+  /* ── Settings extras ── */
+  const [tickEnabled, setTickEnabled] = useState(true);
+  const tickEnabledRef = useRef(true);
+  useEffect(() => { tickEnabledRef.current = tickEnabled; }, [tickEnabled]);
+  const [transcriptionLang, setTranscriptionLang] = useState("auto");
+
   /* ── Sound system (Web Audio API) ── */
   const audioCtxRef = useRef(null);
 
@@ -218,7 +234,7 @@ export default function App() {
 
   /* Tick sound — metronome click each second */
   const playTickSound = useCallback(() => {
-    if (mutedRef.current) return;
+    if (mutedRef.current || !tickEnabledRef.current) return;
     const ctx = getAudioCtx(); if (!ctx || ctx.state !== "running") return;
     const v = volumeRef.current;
     const t0 = ctx.currentTime;
@@ -671,6 +687,8 @@ export default function App() {
         if (savedSettings.volume !== undefined) { setVolume(savedSettings.volume); volumeRef.current = savedSettings.volume; }
         if (savedSettings.autoAdvance) setAutoAdvance(true);
         if (savedSettings.includeBreaks !== undefined) setIncludeBreaks(savedSettings.includeBreaks);
+        if (savedSettings.tickEnabled !== undefined) setTickEnabled(savedSettings.tickEnabled);
+        if (savedSettings.transcriptionLang) setTranscriptionLang(savedSettings.transcriptionLang);
       }
       setDbReady(true);
     })();
@@ -697,11 +715,11 @@ export default function App() {
       db.saveSettings({
         id: "default", userName, userRole,
         darkMode: dk, lang, onboarded, favs, recent, muted, volume,
-        autoAdvance, includeBreaks,
+        autoAdvance, includeBreaks, tickEnabled, transcriptionLang,
       });
     }, 600);
     return () => clearTimeout(timer);
-  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, autoAdvance, includeBreaks, dbReady]);
+  }, [userName, userRole, dk, lang, onboarded, favs, recent, muted, volume, autoAdvance, includeBreaks, tickEnabled, transcriptionLang, dbReady]);
 
   // Auto-save to filesystem (when disk mode active)
   useEffect(() => {
@@ -800,6 +818,26 @@ export default function App() {
       <Suspense fallback={null}><AiSetupModal open={aiSetup} onClose={() => setAiSetup(false)} onSave={handleAiKeySave} hasKey={!!getGroqKey()} t={t} T={T} /></Suspense>
       <Suspense fallback={null}><AiWriteModal open={aiWrite.open} mode={aiWrite.mode} onClose={() => setAiWrite({ open: false, mode: "ai" })} onSubmit={handleAiWrite} loading={aiWriting} t={t} T={T} /></Suspense>
       {editingTask && <Suspense fallback={null}><TimerEditModal task={editingTask} onSave={saveTimerEdit} onClose={() => setEditingTask(null)} t={t} T={T} /></Suspense>}
+      <Suspense fallback={null}><SettingsModal
+        open={settingsOpen} onClose={() => setSettingsOpen(false)} t={t} T={T}
+        userName={userName} setUserName={setUserName} userRole={userRole} setUserRole={setUserRole}
+        lang={lang} setLang={setLang} dk={dk} setDk={setDk}
+        autoAdvance={autoAdvance} setAutoAdvance={setAutoAdvance}
+        includeBreaks={includeBreaks} setIncludeBreaks={setIncludeBreaks}
+        muted={muted} setMuted={setMuted} volume={volume} setVolume={setVolume}
+        tickEnabled={tickEnabled} setTickEnabled={setTickEnabled}
+        storageMode={storageMode} fsFolderName={fsFolderName}
+        onPickFolder={handlePickFolder} onExport={exportProject}
+        onImport={() => importProjectRef.current?.click()} fsSupported={fs.isSupported()}
+        hasApiKey={!!getGroqKey()} onSetApiKey={(k) => { setGroqKey(k); notify(T("apiKeySaved"), "🔑"); }}
+        onClearApiKey={() => { setGroqKey(""); notify(T("apiKeyCleared"), "🔑"); }}
+        transcriptionLang={transcriptionLang} setTranscriptionLang={setTranscriptionLang}
+        onRequestNotifPerm={requestNotifPerm}
+        trashCount={trash.length} onEmptyTrash={() => { setTrash([]); notify(T("settingsEmptyTrash"), "🗑️"); }}
+        onResetOnboarding={() => { setOnboarded(false); }}
+        onClearAllData={async () => { setTasks([]); setDocs([]); setTrash([]); setOnboarded(false); setUserName(""); setUserRole(""); await db.saveSettings({ id: "default" }); await db.saveTasks([]); await db.saveDocs([]); }}
+        notify={notify} roles={T("roles")}
+      /></Suspense>
       {slashOpen && <Suspense fallback={null}><SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} /></Suspense>}
       <input ref={importRef} type="file" accept=".md,.txt" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) importDoc(e.target.files[0]); e.target.value = ""; }} />
       <input ref={importProjectRef} type="file" accept=".json" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) handleImportProject(e.target.files[0]); e.target.value = ""; }} />
@@ -838,19 +876,22 @@ export default function App() {
               <button onClick={() => setTrashOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("trash")}><Trash s={10} /></button>
               <button onClick={() => setSearchOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("helpShortcutSearch")}><SearchI s={10} /></button>
               <button onClick={() => setHelpOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("helpShortcutHelp")}><HelpI s={10} /></button>
-              <button onClick={requestNotifPerm} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("enableNotifications")}><BellI s={10} /></button>
-              <div style={{ display: "flex", alignItems: "center", gap: 3, position: "relative" }}>
-                <button onClick={() => { setMuted(!muted); notify(muted ? T("soundOn") : T("soundOff"), muted ? "🔊" : "🔇"); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: muted ? R : t.mt, fontSize: 11 }} title={muted ? T("soundOn") : T("soundOff")}>{muted ? "🔇" : "🔊"}</button>
-                {!isMini && <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={(e) => { const v = parseFloat(e.target.value); setVolume(v); if (v > 0 && muted) setMuted(false); if (v === 0) setMuted(true); }} style={{ width: 52, height: 3, accentColor: B, opacity: muted ? 0.3 : 0.8, cursor: "pointer" }} title={`${Math.round(volume * 100)}%`} />}
+              <div ref={volPopRef} style={{ position: "relative", display: "inline-flex" }}>
+                <button onClick={() => setVolPopOpen((p) => !p)} onContextMenu={(e) => { e.preventDefault(); setMuted(!muted); notify(muted ? T("soundOn") : T("soundOff"), muted ? "🔊" : "🔇"); }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: muted ? R : t.mt, fontSize: 11 }} title={muted ? T("soundOn") : T("soundOff")}>{muted ? "🔇" : "🔊"}</button>
+                {volPopOpen && <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 6, background: t.card, border: `1px solid ${t.bd}`, borderRadius: 12, padding: "12px 10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, boxShadow: "0 4px 20px rgba(0,0,0,.18)", zIndex: 50, minWidth: 38 }}>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: t.mt, fontFamily: sf }}>{Math.round(volume * 100)}%</span>
+                  <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={(e) => { const v = parseFloat(e.target.value); setVolume(v); if (v > 0 && muted) setMuted(false); if (v === 0) setMuted(true); }} style={{ writingMode: "vertical-lr", direction: "rtl", width: 4, height: 90, accentColor: B, cursor: "pointer", WebkitAppearance: "slider-vertical" }} />
+                  <button onClick={() => { setMuted(!muted); }} style={{ ...tB(t), width: 22, height: 22, borderRadius: 6, color: muted ? R : t.mt, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{muted ? "🔇" : "🔊"}</button>
+                </div>}
               </div>
-              <button onClick={() => { if (getGroqKey()) { setGroqKey(""); notify(T("apiKeyCleared"), "🔑"); } else { setAiSetup(true); } }} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, color: getGroqKey() ? G : t.mt }} title={getGroqKey() ? T("clearApiKey") : T("setApiKey")}><KeyI s={10} /></button>
+              <button onClick={() => setSettingsOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("settings")}><GearI s={10} /></button>
             </div>
             {!isMini && <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ height: 22, padding: "0 6px", borderRadius: 6, border: `1.5px solid ${t.bd}`, background: t.inp, cursor: "pointer", fontFamily: sf, fontSize: 9, fontWeight: 600, color: t.fg }}>{lang === "en" ? "ES" : "EN"}</button>
               <button onClick={() => setDk(!dk)} style={{ width: 40, height: 22, borderRadius: 11, border: `1.5px solid ${t.bd}`, background: t.inp, cursor: "pointer", position: "relative", padding: 0 }}><div style={{ width: 16, height: 16, borderRadius: "50%", background: t.fg, position: "absolute", top: 1.5, left: dk ? 20 : 1.5, transition: "left .3s cubic-bezier(.4,0,.2,1)", display: "flex", alignItems: "center", justifyContent: "center" }}>{dk ? <SunI s={8} c={t.bg} /> : <MoonI s={8} c={t.bg} />}</div></button>
             </div>}
             {isMini && <>
-              <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6, fontFamily: sf, fontSize: 8, fontWeight: 700 }} title={T("language")}>{lang === "en" ? "ES" : "EN"}</button>
+              <button onClick={() => setSettingsOpen(true)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={T("settings")}><GearI s={10} /></button>
               <button onClick={() => setDk(!dk)} style={{ ...tB(t), width: 24, height: 24, borderRadius: 6 }} title={dk ? "Light" : "Dark"}>{dk ? <SunI s={10} /> : <MoonI s={10} />}</button>
             </>}
           </div>
@@ -869,8 +910,7 @@ export default function App() {
             <h1 style={{ fontSize: 14, fontWeight: 700 }}>eter<span style={{ color: R }}>Org</span></h1><div style={{ flex: 1 }} />
             {["timers", "board", "table", "calendar", "gallery", "docs"].map((v) => <button key={v} onClick={() => setView(v)} style={{ height: 26, padding: "0 8px", borderRadius: 6, border: `1px solid ${view === v ? t.fg : t.bd}`, background: view === v ? t.at : "transparent", color: view === v ? t.fg : t.mt, cursor: "pointer", fontSize: 10, fontWeight: 500, fontFamily: sf, textTransform: "capitalize" }}>{v}</button>)}
             <button onClick={() => setSearchOpen(true)} style={sB(t)}><SearchI s={14} /></button>
-            <button onClick={() => setHelpOpen(true)} style={sB(t)} title={T("help")}><HelpI s={14} /></button>
-            <button onClick={requestNotifPerm} style={sB(t)} title={T("enableNotifications")}><BellI s={14} /></button>
+            <button onClick={() => setSettingsOpen(true)} style={sB(t)} title={T("settings")}><GearI s={14} /></button>
             <button onClick={() => setDk(!dk)} style={sB(t)}>{dk ? <SunI s={14} /> : <MoonI s={14} />}</button>
           </div>
         )}
