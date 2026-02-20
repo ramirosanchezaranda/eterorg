@@ -533,6 +533,18 @@ export default function App() {
     }
     updateDoc(currentDoc.id, { content: before + cmd.ins + after }); setSlashOpen(false); edRef.current?.focus();
   };
+  const openSlashMenu = () => {
+    const ta = edRef.current; if (!ta || !currentDoc) return;
+    ta.focus();
+    const pos = ta.selectionStart ?? (currentDoc.content || "").length;
+    const c = currentDoc.content || "";
+    const before = c.slice(0, pos), after = c.slice(pos);
+    updateDoc(currentDoc.id, { content: before + "/" + after });
+    slashIdx.current = pos;
+    setSlashPos({ x: Math.min(40, window.innerWidth - 240), y: Math.min(window.innerHeight - 340, 200) });
+    setSlashOpen(true); setSlashQ(""); setSlashHi(0);
+    requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = pos + 1; });
+  };
   const handleAiWrite = async (prompt, mode) => {
     if (!currentDoc) return;
     setAiWriting(true);
@@ -1182,9 +1194,10 @@ export default function App() {
                     {currentDoc.relatedTasks?.length > 0 && <div style={{ marginBottom: 12, display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}><span style={{ fontSize: 10, color: t.mt, fontFamily: sf }}>{T("relatedTasks")}</span>{currentDoc.relatedTasks.map((tid) => { const tk = tasks.find((x) => x.id === tid); return tk ? <span key={tid} style={{ ...pill(B), fontSize: 9, border: "none" }}>⏱ {tk.name}</span> : null; })}</div>}
                     {/* Editor / Preview */}
                     {editingDoc
-                      ? <div>
-                          <div style={{ fontSize: 10, color: t.mt, marginBottom: 6, fontFamily: sf }}>{T("typeSlash")} <span style={{ color: R, fontWeight: 600 }}>/</span> {T("forCommands")} · <span style={{ color: B }}>{T("wikiLinks")}</span> · Ctrl+Z {T("undo")} · Ctrl+Y {T("redo")}</div>
+                      ? <div style={{ position: "relative" }}>
+                          <div style={{ fontSize: 10, color: t.mt, marginBottom: 6, fontFamily: sf }}>{isMobile ? <button onClick={openSlashMenu} style={{ display: "inline-flex", alignItems: "center", gap: 3, height: 22, padding: "0 8px", borderRadius: 8, border: `1px solid ${t.glassBd}`, background: t.glassHi, color: R, cursor: "pointer", fontFamily: sf, fontSize: 11, fontWeight: 700, verticalAlign: "middle", marginRight: 6 }}>/</button> : <>{T("typeSlash")} <span style={{ color: R, fontWeight: 600 }}>/</span> {T("forCommands")} · </>}<span style={{ color: B }}>{T("wikiLinks")}</span>{!isMobile && <> · Ctrl+Z {T("undo")} · Ctrl+Y {T("redo")}</>}</div>
                           <textarea ref={edRef} value={currentDoc.content || ""} onChange={handleEdInput} onKeyDown={handleEdKey} placeholder={T("startWriting")} style={{ width: "100%", minHeight: isMobile ? 280 : 440, borderRadius: 12, border: `1px solid ${t.bd}`, background: t.inp, color: t.fg, padding: isMobile ? 12 : 18, fontFamily: sf, fontSize: 13, lineHeight: 1.8, resize: "vertical" }} />
+                          {isMobile && <button onClick={openSlashMenu} style={{ position: "absolute", bottom: 14, right: 14, width: 40, height: 40, borderRadius: 12, border: `1.5px solid ${t.glassBd}`, background: t.glass, backdropFilter: "blur(12px)", color: R, cursor: "pointer", fontFamily: sf, fontSize: 20, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,0,0,.12)", zIndex: 10 }} title={T("forCommands")}>/</button>}
                         </div>
                       : <div onClick={() => setEditingDoc(true)} style={{ lineHeight: 1.75, minHeight: 280, cursor: "text" }}>{renderMd(currentDoc.content)}</div>}
                     {/* ── Dictation Panel (/iavoz) — Whisper AI ── */}
