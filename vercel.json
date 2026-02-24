@@ -18,13 +18,11 @@
       ]
     },
     {
-"functions": {
-"api/*.js": {
-"runtime": "nodejs20.x"
-}
-}
-},
-
+      "functions": {
+      "api/*.js": {
+      "runtime": "nodejs20.x"}
+      }
+    },
     {
       "source": "/favicon.svg",
       "headers": [
