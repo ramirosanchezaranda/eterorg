@@ -71,7 +71,8 @@ export async function pickFolder() {
 /**
  * Try to restore the previously-picked folder handle from IndexedDB.
  * Returns the folder name if successful, null otherwise.
- */
+ 
+*/
 export async function restoreFolder() {
   try {
     const stored = await retrieveHandle();
