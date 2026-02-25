@@ -1,3 +1,142 @@
 {
-"items": []
+  "items": [
+    {
+      "meta": {
+        "id": "20260225-0140-api-score-riesgo-fiscal-cobranza-arca-ecommerce-ar",
+        "title": "API Score de Riesgo Fiscal + Cobranza ARCA para eCommerce B2B (Argentina)",
+        "slug": "api-score-riesgo-fiscal-cobranza-arca-ecommerce-ar",
+        "model": "data-api",
+        "created_at_utc": "2026-02-25T01:40:00Z",
+        "country_focus": "AR",
+        "currency": [
+          "ARS",
+          "USD"
+        ],
+        "status": "draft-for-immediate-sale"
+      },
+      "problem": {
+        "summary": "Cobranzas demoradas y retrabajo administrativo por validaciones fiscales manuales, transferencias no conciliadas y priorización deficiente de cartera en eCommerce B2B argentino.",
+        "pain_level": "alto",
+        "buyer": [
+          "Dueño/a PyME",
+          "Gerencia de Administración y Finanzas",
+          "Responsable de Cobranzas",
+          "Operaciones eCommerce"
+        ],
+        "current_cost": {
+          "cashflow_delay_days": "15-45 días en segmentos con fricción administrativa",
+          "ops_overhead": "2-6 horas diarias de seguimiento manual",
+          "error_impact": "notas de crédito, refacturación y pérdida de prioridad de cobro"
+        }
+      },
+      "market_signals": [
+        {
+          "source": "CACE - Estadísticas / MidTerm 2025",
+          "signal": "Crecimiento eCommerce (+79% facturación; +46% órdenes) y mayor uso de transferencias desde billeteras.",
+          "implication": "Más volumen = más fricción operativa en conciliación y cobranza si se mantiene proceso manual.",
+          "url": "https://cace.org.ar/estadisticas"
+        },
+        {
+          "source": "ARCA - Portal oficial",
+          "signal": "Nuevas modalidades de liquidación electrónica mensual y foco en cumplimiento voluntario.",
+          "implication": "Sube la necesidad de trazabilidad y consistencia documental para cobrar sin fricciones.",
+          "url": "https://www.argentina.gob.ar/arca"
+        },
+        {
+          "source": "Ministerio de Economía - Portal oficial",
+          "signal": "Contexto de disciplina fiscal y presión por eficiencia operativa/financiera.",
+          "implication": "Empresas priorizan soluciones de impacto inmediato en caja y productividad administrativa.",
+          "url": "https://www.argentina.gob.ar/economia"
+        }
+      ],
+      "solution": {
+        "name": "CobranzaRisk API AR",
+        "type": "data-api",
+        "one_liner": "API que puntúa riesgo de cobranza y riesgo fiscal por cliente/factura/pedido para priorizar gestión diaria de caja.",
+        "core_features": [
+          "Score 0-100 por factura y cliente (riesgo de mora + riesgo documental)",
+          "Endpoint de priorización diaria de cartera (Top acciones sugeridas)",
+          "Motor de reglas para inconsistencias ARCA/ERP/comprobante",
+          "Webhook de alertas para WhatsApp y email interno",
+          "Panel mínimo de métricas: DSO estimado, riesgo acumulado, recuperación semanal"
+        ],
+        "integrations": [
+          "ERP (Tango, Contabilium, Odoo o similar vía CSV/API)",
+          "Facturación electrónica / padrones fiscales",
+          "WhatsApp Business API (vía proveedor)",
+          "Sheets/Looker Studio para reporting rápido"
+        ]
+      },
+      "go_to_market": {
+        "offer": "Implementación Express 10 días",
+        "promise_7_14_days": "En 7-14 días, bajar 15%-30% el atraso de cobro en cartera intervenida y reducir 25% observaciones administrativas en facturas priorizadas.",
+        "implementation_time": "10 días corridos",
+        "pricing": {
+          "setup_ars": 2400000,
+          "setup_usd": 2000,
+          "monthly_ars": 480000,
+          "monthly_usd": 400,
+          "low_ticket": {
+            "name": "Diagnóstico Express 100 Facturas",
+            "price_ars": 390000,
+            "price_usd": 325,
+            "delivery": "7 días"
+          }
+        },
+        "whatsapp_script_3_lines": [
+          "Hola, estamos viendo que muchas PyMEs están cobrando tarde por validaciones fiscales y seguimiento manual de transferencias.",
+          "En 10 días te activamos un API score que prioriza qué facturas cobrar hoy para bajar mora y reprocesos.",
+          "Si querés, arrancamos con diagnóstico de 100 facturas esta semana y te muestro impacto real en 7 días."
+        ],
+        "common_objections": [
+          {
+            "objection": "Ya tengo ERP, no necesito otra herramienta.",
+            "response": "No reemplaza ERP: agrega scoring y priorización de riesgo en tiempo real para cobrar antes y con menos retrabajo."
+          },
+          {
+            "objection": "No quiero un proyecto largo.",
+            "response": "Alcance cerrado de 10 días con quick wins en semana 2 y métricas de impacto definidas desde el día 1."
+          },
+          {
+            "objection": "Está caro.",
+            "response": "Entramos por low-ticket; si no hay potencial de retorno mínimo 3x, no escalamos al plan completo."
+          }
+        ],
+        "next_step_close_24h": "Coordinar call de 20 minutos hoy, firmar propuesta de alcance cerrado y reservar kickoff dentro de 72 horas."
+      },
+      "delivery_plan": {
+        "day_1_2": "Discovery técnico + mapeo de datos + definición KPIs",
+        "day_3_5": "Conectores y normalización de datos",
+        "day_6_7": "Modelo de score + reglas de riesgo",
+        "day_8_9": "Alertas y priorización operativa",
+        "day_10": "Capacitación, handoff y tablero de seguimiento"
+      },
+      "kpis": {
+        "north_star": "Reducción de días de cobro en cartera intervenida",
+        "metrics": [
+          "% facturas priorizadas cobradas en 7 días",
+          "Variación de DSO en segmento piloto",
+          "% de comprobantes observados vs baseline",
+          "Horas administrativas ahorradas por semana"
+        ],
+        "target_14_days": {
+          "dso_reduction": "15%-30% en cartera piloto",
+          "admin_observation_reduction": ">=25%",
+          "time_saved": "8-15 horas/semana"
+        }
+      },
+      "risks": [
+        "Calidad de datos inicial heterogénea",
+        "Demoras de acceso a sistemas legado",
+        "Baja disciplina comercial en seguimiento de priorización"
+      ],
+      "mitigations": [
+        "Plantilla de extracción estándar + validación en día 1",
+        "Plan B por cargas CSV si API no está disponible",
+        "Ritual diario de 15 minutos con responsable de cobranzas"
+      ],
+      "_ingested_at_utc": "2026-02-25T01:41:01.971Z",
+      "_source": "openclaw"
+    }
+  ]
 }
