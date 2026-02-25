@@ -2,6 +2,130 @@
   "items": [
     {
       "meta": {
+        "generated_at_utc": "2026-02-25T02:40:00Z",
+        "timestamp_id": "20260225-0240",
+        "language": "es-AR",
+        "country_focus": "Argentina"
+      },
+      "project": {
+        "title": "Integración ARCA + Cobranzas por Billeteras + WhatsApp para PyMEs (Argentina)",
+        "slug": "integracion-arca-cobranzas-billeteras-whatsapp-pyme-ar",
+        "model": "integraciones",
+        "category": "finanzas-operaciones",
+        "summary": "Servicio de integración rápida para automatizar conciliación de cobros por transferencias/billeteras y validación fiscal operativa vinculada a ARCA, con alertas por WhatsApp.",
+        "pain": "Cobranzas demoradas, errores de imputación y retrabajo administrativo por conciliación manual y validaciones fiscales dispersas.",
+        "icp": {
+          "segments": [
+            "Distribuidores PyME",
+            "Mayoristas",
+            "eCommerce B2B/B2C"
+          ],
+          "geo": "AMBA + principales ciudades de Argentina",
+          "size": "Empresas con 200-5000 cobros/mes",
+          "buyer_roles": [
+            "Dueño/a",
+            "Gerencia de Administración y Finanzas",
+            "Responsable de Cobranzas"
+          ]
+        }
+      },
+      "market_signals": [
+        {
+          "source": "BCRA - Estadísticas e Indicadores",
+          "url": "https://www.bcra.gob.ar/estadisticas-indicadores/",
+          "date_observed": "2026-02-24",
+          "signal": "Tipo de cambio vendedor $1.400,12 y tasas de adelantos en cuenta corriente 47,17% n.a.",
+          "implication": "Con costo financiero alto, acelerar imputación y cobranza impacta directo en caja."
+        },
+        {
+          "source": "CACE - Estudio MidTerm 2025",
+          "url": "https://cace.org.ar/pages/estadisticas",
+          "date_observed": "2026-02-25",
+          "signal": "eCommerce +79% interanual en facturación; 149,5 millones de órdenes; crecimiento de transferencias/billeteras.",
+          "implication": "Más volumen digital aumenta fricción operativa en conciliación y postventa de pagos."
+        },
+        {
+          "source": "ARCA - portal oficial",
+          "url": "https://www.argentina.gob.ar/arca",
+          "date_observed": "2026-02-25",
+          "signal": "Actualizaciones frecuentes en vencimientos y modalidades de liquidación/declaración.",
+          "implication": "PyMEs necesitan integración operativa para cumplir sin sumar carga manual."
+        }
+      ],
+      "offer": {
+        "value_proposition": "Automatizar conciliación e imputación de cobros en 10 días, sin reemplazar ERP/facturador existente.",
+        "promise_7_14_days": "En 10 días corridos reducimos 40-60% el tiempo de conciliación y 30% los reclamos por pago no imputado.",
+        "implementation_time": "10 días corridos (rango 7-14 días según complejidad)",
+        "deliverables": [
+          "Conexión a 1-2 fuentes de cobro (banco/billetera)",
+          "Pipeline de matching de pagos con score de confianza",
+          "Bandeja de excepciones para revisión humana",
+          "Validación fiscal operativa (reglas ARCA básicas)",
+          "Alertas por WhatsApp/email y tablero de cierre diario",
+          "Capacitación de 90 minutos + SOP"
+        ]
+      },
+      "pricing": {
+        "currency_reference": [
+          "ARS",
+          "USD"
+        ],
+        "setup": {
+          "ars": 1950000,
+          "usd": 1450
+        },
+        "monthly": {
+          "ars": 590000,
+          "usd": 440
+        },
+        "low_ticket": {
+          "name": "Kit Conciliación Starter",
+          "ars": 149000,
+          "usd": 110,
+          "includes": "Hasta 400 cobros/mes, 1 canal, reglas estándar, soporte asíncrono"
+        }
+      },
+      "sales": {
+        "whatsapp_script_3_lines": [
+          "Vi que están cobrando por transferencia y WhatsApp: ahí suele trabarse la caja por imputación manual.",
+          "Implementamos en 10 días una integración ARCA + conciliación automática que baja 40-60% el tiempo administrativo.",
+          "Si te sirve, hoy te muestro en 15 min un diagnóstico y te dejo plan para cerrar esta semana."
+        ],
+        "common_objections": [
+          {
+            "objection": "Ya conciliamos con Excel.",
+            "response": "Mantenemos Excel como respaldo y automatizamos tareas repetitivas para liberar horas sin cambiar toda la operación."
+          },
+          {
+            "objection": "No quiero tocar mi facturador/ERP.",
+            "response": "No lo reemplazamos: integramos por CSV/API/webhook y respetamos flujo actual."
+          },
+          {
+            "objection": "Temo errores automáticos.",
+            "response": "Cada match tiene score y trazabilidad; lo dudoso va a excepciones para validación humana."
+          }
+        ],
+        "close_in_24h_next_step": "Diagnóstico de 25 minutos hoy + propuesta cerrada en el día + reserva de kickoff con 50% de seña dentro de 24 horas."
+      },
+      "delivery": {
+        "kpis": [
+          "Tiempo medio de imputación de cobros",
+          "% de conciliación automática",
+          "Cantidad de excepciones por día",
+          "Días de cuentas por cobrar (proxy)"
+        ],
+        "stack_sugerido": [
+          "n8n/Make",
+          "WhatsApp Business API",
+          "Google Sheets o PostgreSQL",
+          "Conectores API/CSV bancarios"
+        ]
+      },
+      "_ingested_at_utc": "2026-02-25T02:41:03.886Z",
+      "_source": "openclaw"
+    },
+    {
+      "meta": {
         "id": "20260225-0140-api-score-riesgo-fiscal-cobranza-arca-ecommerce-ar",
         "title": "API Score de Riesgo Fiscal + Cobranza ARCA para eCommerce B2B (Argentina)",
         "slug": "api-score-riesgo-fiscal-cobranza-arca-ecommerce-ar",
