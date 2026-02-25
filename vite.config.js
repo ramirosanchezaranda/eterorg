@@ -2,10 +2,16 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+const isDev = process.env.NODE_ENV === "development";
+
 export default defineConfig({
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
   plugins: [
     react(),
-    VitePWA({
+    !isDev ? VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "fonts/*.otf"],
       manifest: {
@@ -33,8 +39,8 @@ export default defineConfig({
           },
         ],
       },
-    }),
-  ],
+    }) : null,
+  ].filter(Boolean),
   build: {
     minify: "terser",
     terserOptions: {

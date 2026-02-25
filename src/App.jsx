@@ -74,7 +74,7 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+const [settingsOpen, setSettingsOpen] = useState(false);
   const [volPopOpen, setVolPopOpen] = useState(false);
   const volPopRef = useRef(null);
   useEffect(() => {
@@ -416,6 +416,16 @@ export default function App() {
   const addBlankDoc = () => { const d = { id: uid(), name: "Untitled", type: "doc", content: "", icon: "📄", cover: null, history: [], relatedTasks: [], createdAt: now() }; setDocs([...docs, d]); setActiveDoc(d.id); setView("docs"); };
   const duplicateDoc = () => { if (!currentDoc) return; const d = { ...JSON.parse(JSON.stringify(currentDoc)), id: uid(), name: `${currentDoc.name} (copy)` }; setDocs([...docs, d]); setActiveDoc(d.id); notify(T("pageDuplicated"), "📋"); };
   const deleteDoc = () => { if (!currentDoc) return; toTrash(currentDoc, "doc"); const f = (ns) => ns.filter((n) => n.id !== currentDoc.id).map((n) => ({ ...n, children: n.children ? f(n.children) : n.children })); setDocs(f(docs)); setActiveDoc(null); notify(T("movedToTrash"), "🗑️"); };
+  const deleteDocById = (id) => { 
+    const doc = allDocs.find(d => d.id === id); 
+    if (!doc) return; 
+    toTrash(doc, "doc"); 
+    const f = (ns) => ns.filter((n) => n.id !== id).map((n) => ({ ...n, children: n.children ? f(n.children) : n.children })); 
+    setDocs(f(docs)); 
+    if (currentDoc?.id === id) setActiveDoc(null); 
+    notify(T("movedToTrash"), "🗑️"); 
+  };
+  const allDocs = useMemo(() => { const r = []; const w = (ns) => ns.forEach((n) => { if (n.type === "doc") r.push(n); if (n.children) w(n.children); }); w(docs); return r; }, [docs]);
   const exportDoc = () => { if (!currentDoc) return; downloadFile(`${currentDoc.name}.md`, currentDoc.content || ""); notify(T("exportedMd"), "📥"); };
   const importDoc = (file) => { const reader = new FileReader(); reader.onload = (e) => { const d = { id: uid(), name: file.name.replace(/\.md$/, ""), type: "doc", content: e.target.result, icon: "📄", cover: null, history: [], relatedTasks: [], createdAt: now() }; setDocs((p) => [...p, d]); setActiveDoc(d.id); setView("docs"); notify(T("fileImported"), "📤"); }; reader.readAsText(file); };
   const importRef = useRef(null);
@@ -591,6 +601,7 @@ export default function App() {
     notify(T("projectExported"), "📦");
   };
   const importProjectRef = useRef(null);
+
   const handleImportProject = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -713,8 +724,8 @@ export default function App() {
     return filterTasks(visible);
   }, [tasks, filters]);
 
-  /* ═══════ LOCAL DB SYNC ═══════ */
-  // Load everything from IndexedDB on mount
+/* ═══════ LOCAL DB SYNC ═══════ */
+// Load everything from IndexedDB on mount
   useEffect(() => {
     (async () => {
       const [savedTasks, savedDocs, savedTrash, savedSettings] = await Promise.all([
@@ -790,7 +801,7 @@ export default function App() {
   useEffect(() => {
     if (!dbReady) return;
     const timer = setTimeout(() => {
-      db.saveSettings({
+db.saveSettings({
         id: "default", userName, userRole,
         darkMode: dk, lang, onboarded, favs, recent, muted, volume,
         autoAdvance, includeBreaks, tickEnabled, transcriptionLang,
@@ -1148,7 +1159,7 @@ export default function App() {
             {view === "calendar" && <Suspense fallback={null}><CalendarView tasks={tasks} onCreateTask={createCalTask} onSchedule={scheduleTask} onUnschedule={unscheduleTask} onRemoveTask={removeT} play={play} pause={pause} markDone={markDone} t={t} T={T} /></Suspense>}
 
             {/* ═══ GALLERY ═══ */}
-            {view === "gallery" && <Suspense fallback={null}><GalleryView docs={docs} setAD={(id) => { setActiveDoc(id); addRecent(id); }} setV={setView} onAddDoc={addBlankDoc} t={t} T={T} /></Suspense>}
+            {view === "gallery" && <Suspense fallback={null}><GalleryView docs={docs} setAD={(id) => { setActiveDoc(id); addRecent(id); }} setV={setView} onAddDoc={addBlankDoc} t={t} T={T} onDeleteDoc={deleteDocById} onAiHelp={(doc) => { setActiveDoc(doc.id); setView("docs"); setAiWrite({ open: true, mode: "ai" }); }} /></Suspense>}
 
             {/* ═══ DOCS ═══ */}
             {view === "docs" && <div className="fi">
