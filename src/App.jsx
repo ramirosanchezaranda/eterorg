@@ -11,7 +11,7 @@ import {
   Plus, Trash, FileT, Fold, PlayI, TimerI, SideI, MoonI, SunI, ResetI,
   Sparkle, LinkI, XI, ArrowR, SearchI, Star, Board, TableI, HistI,
   CalI, GallI, UpI, CopyI, DlI, FilterI, BellI, HelpI, KeyI,
-  MicI, SkipI, EditI, ExportI, ImportI, FolderOpenI, GearI,
+  MicI, SkipI, EditI, ExportI, ImportI, GearI,
   VolumeI, VolMuteI,
 } from "./components/icons";
 
@@ -1029,12 +1029,6 @@ db.saveSettings({
                   {/* Export / Import */}
                   <button onClick={exportProject} title={T("exportProject")} style={{ ...tB(t), height: 28, padding: "0 8px", borderRadius: 8 }}><ExportI s={10} /></button>
                   <button onClick={() => importProjectRef.current?.click()} title={T("importProject")} style={{ ...tB(t), height: 28, padding: "0 8px", borderRadius: 8 }}><ImportI s={10} /></button>
-                  {/* Filesystem */}
-                  {fs.isSupported() && (
-                    <button onClick={handlePickFolder} title={fsFolderName ? `${T("fsActive")}: ${fsFolderName}` : T("chooseFolder")} style={{ height: 28, padding: "0 10px", borderRadius: 8, border: storageMode === "disk" ? `1.5px solid ${G}` : `1px solid ${t.bd}`, background: storageMode === "disk" ? `${G}15` : "transparent", color: storageMode === "disk" ? G : t.mt, cursor: "pointer", fontFamily: sf, fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                      <FolderOpenI s={10} /> {storageMode === "disk" ? fsFolderName : T("diskMode")}
-                    </button>
-                  )}
                 </div>
               </div>
               <FilterBar filters={filters} setFilters={setFilters} t={t} T={T} />

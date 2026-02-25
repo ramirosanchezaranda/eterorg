@@ -1,28 +1,145 @@
 import { useMemo, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { B, sf } from "../../constants/theme";
 import { FileT } from "../icons";
 
 export default function GalleryView({ docs, setAD, setV, onAddDoc, t, T, onDeleteDoc, onAiHelp }) {
   const [contextMenu, setContextMenu] = useState(null);
-  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const rootRef = useRef(null);
   const menuRef = useRef(null);
 
+  const clamp = (value, min, max = Infinity) => Math.min(max, Math.max(min, value));
+  const safeNumber = (value, fallback) => (Number.isFinite(value) ? value : fallback);
+
+  const closeMenu = () => {
+    setContextMenu(null);
+  };
+
+  const getMenuPosFromCardAnchor = (anchorRect, menuW = 170, menuH = 132, gap = 4, margin = 8) => {
+    const viewportW = safeNumber(window.innerWidth, menuW + margin * 2);
+    const viewportH = safeNumber(window.innerHeight, menuH + margin * 2);
+
+    const anchorLeft = safeNumber(anchorRect?.left, margin);
+    const anchorTop = safeNumber(anchorRect?.top, margin);
+    const anchorRight = safeNumber(anchorRect?.right, anchorLeft);
+    const anchorBottom = safeNumber(anchorRect?.bottom, anchorTop);
+
+    // Desktop preferred position: from the BOTTOM-RIGHT corner, outside and below the card.
+    let x = anchorRight - menuW;
+    let y = anchorBottom + gap;
+
+    // If there is no room below, fallback above the bottom edge.
+    if (y + menuH > viewportH - margin) y = anchorBottom - menuH - gap;
+
+    const maxX = Math.max(margin, viewportW - menuW - margin);
+    const maxY = Math.max(margin, viewportH - menuH - margin);
+
+    return {
+      x: clamp(x, margin, maxX),
+      y: clamp(y, margin, maxY),
+    };
+  };
+
+  const getMenuPosFromButtonAnchor = (anchorRect, menuW = 170, menuH = 132, gap = 6, margin = 8) => {
+    const viewportW = safeNumber(window.innerWidth, menuW + margin * 2);
+    const viewportH = safeNumber(window.innerHeight, menuH + margin * 2);
+
+    const anchorLeft = safeNumber(anchorRect?.left, margin);
+    const anchorTop = safeNumber(anchorRect?.top, margin);
+    const anchorRight = safeNumber(anchorRect?.right, anchorLeft);
+    const anchorBottom = safeNumber(anchorRect?.bottom, anchorTop);
+
+    // Mobile preferred position: below the "..." trigger.
+    let x = anchorRight - menuW;
+    let y = anchorBottom + gap;
+
+    // If no space below, open above the button.
+    if (y + menuH > viewportH - margin) y = anchorTop - menuH - gap;
+
+    const maxX = Math.max(margin, viewportW - menuW - margin);
+    const maxY = Math.max(margin, viewportH - menuH - margin);
+
+    return {
+      x: clamp(x, margin, maxX),
+      y: clamp(y, margin, maxY),
+    };
+  };
+
+  const openMenuFromCard = (doc, anchorEl) => {
+    if (!anchorEl) return;
+    const rect = anchorEl.getBoundingClientRect();
+    const anchorRect = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    const { x, y } = getMenuPosFromCardAnchor(anchorRect);
+    setContextMenu({ x, y, doc, anchorRect, anchorType: "card" });
+  };
+
+  const openMenuFromButton = (doc, buttonEl) => {
+    if (!buttonEl) return;
+    const rect = buttonEl.getBoundingClientRect();
+    const anchorRect = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    const { x, y } = getMenuPosFromButtonAnchor(anchorRect);
+    setContextMenu({ x, y, doc, anchorRect, anchorType: "button" });
+  };
+
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setContextMenu(null);
-      }
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu?.anchorRect || !menuRef.current) return;
+
+    const rect = menuRef.current.getBoundingClientRect();
+    const resolver = contextMenu.anchorType === "button" ? getMenuPosFromButtonAnchor : getMenuPosFromCardAnchor;
+    const { x: nextX, y: nextY } = resolver(contextMenu.anchorRect, rect.width, rect.height);
+
+    if (nextX !== contextMenu.x || nextY !== contextMenu.y) {
+      setContextMenu((prev) => (prev ? { ...prev, x: nextX, y: nextY } : prev));
+    }
+  }, [contextMenu]);
+
+  useEffect(() => {
+    const handlePointerDown = (e) => {
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      closeMenu();
     };
-    const handleRightClick = (e) => {
-      if (e.target.closest('.card') === null) {
-        setContextMenu(null);
+
+    const handleContextOutsideCard = (e) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target) {
+        closeMenu();
+        return;
       }
+
+      if (!rootRef.current?.contains(target)) {
+        closeMenu();
+        return;
+      }
+
+      const clickedCard = target.closest('[data-gallery-card="true"]');
+      if (!clickedCard) closeMenu();
     };
-    document.addEventListener("contextmenu", handleRightClick);
-    document.addEventListener("click", handleClickOutside);
+
+    const handleEsc = (e) => {
+      if (e.key === "Escape") closeMenu();
+    };
+
+    const handleViewportChange = () => closeMenu();
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("contextmenu", handleContextOutsideCard);
+    document.addEventListener("keydown", handleEsc);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
     return () => {
-      document.removeEventListener("contextmenu", handleRightClick);
-      document.removeEventListener("click", handleClickOutside);
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("contextmenu", handleContextOutsideCard);
+      document.removeEventListener("keydown", handleEsc);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
     };
   }, []);
 
@@ -34,50 +151,46 @@ export default function GalleryView({ docs, setAD, setV, onAddDoc, t, T, onDelet
   }, [docs]);
 
   const handleContextMenu = (e, doc) => {
+    if (isMobile) return;
     e.preventDefault();
     e.stopPropagation();
-    setSelectedDoc(doc);
-    const menuWidth = 160;
-    const menuHeight = 120;
-    let x = e.clientX;
-    let y = e.clientY;
-    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
-    setContextMenu({ x, y });
-  };
-
-  const closeMenu = () => {
-    setContextMenu(null);
-    setSelectedDoc(null);
+    // Desktop: open anchored to the clicked card (bottom-right corner, below by default).
+    openMenuFromCard(doc, e.currentTarget);
   };
 
   const handleEdit = (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (selectedDoc) {
-      setAD(selectedDoc.id);
+    const doc = contextMenu?.doc;
+    if (doc) {
+      setAD(doc.id);
       setV("docs");
     }
     closeMenu();
   };
 
   const handleDelete = (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (selectedDoc && onDeleteDoc) {
-      onDeleteDoc(selectedDoc.id);
+    const doc = contextMenu?.doc;
+    if (doc && onDeleteDoc) {
+      onDeleteDoc(doc.id);
     }
     closeMenu();
   };
 
   const handleAiHelp = (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (selectedDoc && onAiHelp) {
-      onAiHelp(selectedDoc);
+    const doc = contextMenu?.doc;
+    if (doc && onAiHelp) {
+      onAiHelp(doc);
     }
     closeMenu();
   };
 
   return (
-    <div className="fi">
+    <div className="fi" ref={rootRef}>
       <h2 style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.03em", marginBottom: 20, fontFamily: sf }}>{T("gallery")}</h2>
       {allDocs.length === 0
         ? <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 340 }}>
@@ -94,12 +207,43 @@ export default function GalleryView({ docs, setAD, setV, onAddDoc, t, T, onDelet
             {allDocs.map((d) => (
               <div 
                 key={d.id} 
+                data-gallery-card="true"
                 onClick={(e) => { e.stopPropagation(); setAD(d.id); setV("docs"); }} 
                 onContextMenu={(e) => handleContextMenu(e, d)}
-                style={{ border: `1px solid ${t.bd}`, borderRadius: 12, overflow: "hidden", cursor: "pointer", transition: "all .15s", background: t.card }} 
+                style={{ border: `1px solid ${t.bd}`, borderRadius: 12, overflow: "hidden", cursor: "pointer", transition: "all .15s", background: t.card, position: "relative" }} 
                 onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")} 
                 onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
               >
+                {isMobile && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openMenuFromButton(d, e.currentTarget);
+                    }}
+                    aria-label="More"
+                    title="..."
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      width: 28,
+                      height: 24,
+                      borderRadius: 8,
+                      border: `1px solid ${t.bd}`,
+                      background: t.card,
+                      color: t.mt,
+                      cursor: "pointer",
+                      zIndex: 5,
+                      fontFamily: sf,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    ...
+                  </button>
+                )}
                 <div style={{ height: 80, background: d.cover || `${B}12`, display: "flex", alignItems: "center", justifyContent: "center" }}>{!d.cover && <span style={{ fontSize: 32, opacity: .5 }}>{d.icon || "📄"}</span>}</div>
                 <div style={{ padding: "12px 14px" }}>
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: sf }}>{d.icon || "📄"} {d.name}</div>
@@ -108,9 +252,11 @@ export default function GalleryView({ docs, setAD, setV, onAddDoc, t, T, onDelet
               </div>
             ))}
           </div>}
-      {contextMenu && (
+      {contextMenu && createPortal(
         <div 
           ref={menuRef}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
           style={{ 
             position: "fixed", 
             top: contextMenu.y, 
@@ -134,7 +280,8 @@ export default function GalleryView({ docs, setAD, setV, onAddDoc, t, T, onDelet
           <button onClick={handleDelete} style={{ display: "block", width: "100%", padding: "8px 14px", border: "none", background: "transparent", color: "#EF4444", cursor: "pointer", fontFamily: sf, fontSize: 13, textAlign: "left" }}>
             {T("delete")}
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
