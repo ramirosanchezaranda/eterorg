@@ -11,7 +11,7 @@ import {
   Plus, Trash, FileT, Fold, PlayI, TimerI, SideI, MoonI, SunI, ResetI,
   Sparkle, LinkI, XI, ArrowR, SearchI, Star, Board, TableI, HistI,
   CalI, GallI, UpI, CopyI, DlI, FilterI, BellI, HelpI, KeyI,
-  MicI, SkipI, EditI, ExportI, ImportI, GearI,
+  MicI, SkipI, EditI, ExportI, ImportI, FolderOpenI, GearI,
   VolumeI, VolMuteI,
 } from "./components/icons";
 
@@ -427,8 +427,96 @@ const [settingsOpen, setSettingsOpen] = useState(false);
   };
   const allDocs = useMemo(() => { const r = []; const w = (ns) => ns.forEach((n) => { if (n.type === "doc") r.push(n); if (n.children) w(n.children); }); w(docs); return r; }, [docs]);
   const exportDoc = () => { if (!currentDoc) return; downloadFile(`${currentDoc.name}.md`, currentDoc.content || ""); notify(T("exportedMd"), "📥"); };
-  const importDoc = (file) => { const reader = new FileReader(); reader.onload = (e) => { const d = { id: uid(), name: file.name.replace(/\.md$/, ""), type: "doc", content: e.target.result, icon: "📄", cover: null, history: [], relatedTasks: [], createdAt: now() }; setDocs((p) => [...p, d]); setActiveDoc(d.id); setView("docs"); notify(T("fileImported"), "📤"); }; reader.readAsText(file); };
+  const createImportedDoc = (name, content = "") => ({
+    id: uid(),
+    name: name.replace(/\.(md|markdown|txt)$/i, ""),
+    type: "doc",
+    content,
+    icon: "📄",
+    cover: null,
+    history: [],
+    relatedTasks: [],
+    createdAt: now(),
+  });
+  const createImportedFolder = (name) => ({ id: uid(), name: name || T("newFolder"), type: "folder", children: [] });
+  const findFirstDocId = (nodes) => {
+    for (const n of nodes || []) {
+      if (n.type === "doc") return n.id;
+      if (n.children) {
+        const nested = findFirstDocId(n.children);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  };
+  const importDoc = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const d = createImportedDoc(file.name, e.target.result);
+      setDocs((p) => [...p, d]);
+      setActiveDoc(d.id);
+      setView("docs");
+      notify(T("fileImported"), "📤");
+    };
+    reader.readAsText(file);
+  };
+  const importFolderFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const docFiles = files
+      .filter((f) => /\.(md|markdown|txt)$/i.test(f.name))
+      .sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
+    if (!docFiles.length) {
+      notify(T("folderImportNoDocs"), "⚠️");
+      return;
+    }
+
+    const firstPath = (docFiles[0].webkitRelativePath || docFiles[0].name).split("/").filter(Boolean);
+    const rootName = firstPath.length > 1
+      ? firstPath[0]
+      : docFiles[0].name.replace(/\.(md|markdown|txt)$/i, "") || T("newFolder");
+    const rootFolder = createImportedFolder(rootName);
+    const folders = new Map();
+    folders.set("", rootFolder);
+
+    const ensureFolder = (segments) => {
+      let path = "";
+      let parent = rootFolder;
+      for (const seg of segments) {
+        path = path ? `${path}/${seg}` : seg;
+        if (!folders.has(path)) {
+          const folderNode = createImportedFolder(seg);
+          parent.children.push(folderNode);
+          folders.set(path, folderNode);
+        }
+        parent = folders.get(path);
+      }
+      return parent;
+    };
+
+    try {
+      for (const file of docFiles) {
+        const relPath = file.webkitRelativePath || file.name;
+        const parts = relPath.split("/").filter(Boolean);
+        const relative = parts.length > 1 ? parts.slice(1) : [...parts];
+        const fileName = relative.pop() || file.name;
+        const parent = ensureFolder(relative);
+        const content = await file.text();
+        parent.children.push(createImportedDoc(fileName, content));
+      }
+
+      const firstDocId = findFirstDocId(rootFolder.children);
+      setDocs((p) => [...p, rootFolder]);
+      if (firstDocId) setActiveDoc(firstDocId);
+      setView("docs");
+      notify(T("folderImported"), "📁");
+    } catch (e) {
+      console.error("[docs] importFolderFiles", e);
+      notify(T("folderImportError"), "⚠️");
+    }
+  };
   const importRef = useRef(null);
+  const importFolderRef = useRef(null);
 
   /* AI */
   const [generating, setGen] = useState(false);
@@ -932,6 +1020,7 @@ db.saveSettings({
       /></Suspense>
       {slashOpen && <Suspense fallback={null}><SlashMenu query={slashQ} onSelect={handleSlashSel} pos={slashPos} t={t} T={T} activeIdx={slashHi} itemsRef={slashItems} /></Suspense>}
       <input ref={importRef} type="file" accept=".md,.txt" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) importDoc(e.target.files[0]); e.target.value = ""; }} />
+      <input ref={importFolderRef} type="file" webkitdirectory="" directory="" multiple style={{ display: "none" }} onChange={(e) => { if (e.target.files?.length) importFolderFiles(e.target.files); e.target.value = ""; }} />
       <input ref={importProjectRef} type="file" accept=".json" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) handleImportProject(e.target.files[0]); e.target.value = ""; }} />
 
       {/* ═══ SIDEBAR ═══ */}
@@ -958,7 +1047,7 @@ db.saveSettings({
           {favDocs.length > 0 && <div style={{ marginBottom: 6 }}><div style={{ fontSize: 9, letterSpacing: "0.15em", textTransform: "uppercase", color: t.mt, padding: "4px 8px", fontFamily: sf, display: "flex", alignItems: "center", gap: 4 }}><Star s={8} c={Y} /> {T("favorites")}</div>{favDocs.map((d) => <button key={d.id} onClick={() => { setActiveDoc(d.id); setView("docs"); setEditingDoc(false); addRecent(d.id); }} onDoubleClick={() => { setActiveDoc(d.id); setView("docs"); setEditingDoc(true); addRecent(d.id); }} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "4px 10px", borderRadius: 6, border: "none", background: activeDoc === d.id ? t.at : "transparent", color: activeDoc === d.id ? t.fg : t.mt, cursor: "pointer", fontFamily: sf, fontSize: 12, textAlign: "left" }}><span style={{ fontSize: 10 }}>{d.icon || "📄"}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span></button>)}</div>}
           {recentDocs.length > 0 && <div style={{ marginBottom: 6 }}><div style={{ fontSize: 9, letterSpacing: "0.15em", textTransform: "uppercase", color: t.mt, padding: "4px 8px", fontFamily: sf }}>⏱ {T("recent")}</div>{recentDocs.slice(0, 4).map((d) => <button key={d.id} onClick={() => { setActiveDoc(d.id); setView("docs"); setEditingDoc(false); }} onDoubleClick={() => { setActiveDoc(d.id); setView("docs"); setEditingDoc(true); addRecent(d.id); }} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "4px 10px", borderRadius: 6, border: "none", background: "transparent", color: t.mt, cursor: "pointer", fontFamily: sf, fontSize: 12, textAlign: "left" }}><span style={{ fontSize: 10 }}>{d.icon || "📄"}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span></button>)}</div>}
           {(view === "timers" || view === "board" || view === "table" || view === "calendar") && <div><div style={{ fontSize: 9, letterSpacing: "0.15em", textTransform: "uppercase", color: t.mt, padding: "4px 8px", fontFamily: sf }}>{T("tasks")} · {tasks.filter((x) => x.done).length}/{tasks.length}</div>{tasks.slice(0, 15).map((tk) => <div key={tk.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, fontSize: 12, color: tk.done ? t.mt : t.fg, textDecoration: tk.done ? "line-through" : "none" }}><div style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: tk.done ? G : tk.running ? Y : t.bd, animation: tk.running ? "pulse 2s infinite" : "none" }} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tk.name}</span><span style={{ fontSize: 10, fontFamily: sf, color: t.mt, flexShrink: 0 }}>{fmt(tk.remaining)}</span></div>)}</div>}
-          {view === "docs" && <div><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", marginBottom: 2 }}><span style={{ fontSize: 9, letterSpacing: "0.15em", textTransform: "uppercase", color: t.mt, fontFamily: sf }}>{T("documents")}</span><div style={{ display: "flex", gap: 2 }}><button onClick={addBlankDoc} style={{ ...tB(t), width: 18, height: 18 }}><Plus s={9} /></button><button onClick={addRootFolder} style={{ ...tB(t), width: 18, height: 18 }}><Fold s={8} /></button><button onClick={() => setTemplateOpen(true)} style={{ ...tB(t), width: 18, height: 18 }} title="Template">✦</button><button onClick={() => importRef.current?.click()} style={{ ...tB(t), width: 18, height: 18 }} title="Import .md"><UpI s={8} /></button></div></div>{docs.map((n) => <DocTree key={n.id} node={n} depth={0} activeDoc={activeDoc} setAD={(id) => { setActiveDoc(id); setEditingDoc(false); addRecent(id); }} onEditDoc={(id) => { setActiveDoc(id); setEditingDoc(true); addRecent(id); }} docs={docs} setDocs={setDocs} t={t} favs={favs} toggleFav={toggleFav} drag={drag} setDrag={setDrag} />)}</div>}
+          {view === "docs" && <div><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", marginBottom: 2 }}><span style={{ fontSize: 9, letterSpacing: "0.15em", textTransform: "uppercase", color: t.mt, fontFamily: sf }}>{T("documents")}</span><div style={{ display: "flex", gap: 2 }}><button onClick={addBlankDoc} style={{ ...tB(t), width: 18, height: 18 }}><Plus s={9} /></button><button onClick={addRootFolder} style={{ ...tB(t), width: 18, height: 18 }}><Fold s={8} /></button><button onClick={() => setTemplateOpen(true)} style={{ ...tB(t), width: 18, height: 18 }} title="Template">✦</button><button onClick={() => importRef.current?.click()} style={{ ...tB(t), width: 18, height: 18 }} title="Import .md"><UpI s={8} /></button><button onClick={() => importFolderRef.current?.click()} style={{ ...tB(t), width: 18, height: 18 }} title={T("importFolder")}><FolderOpenI s={8} /></button></div></div>{docs.map((n) => <DocTree key={n.id} node={n} depth={0} activeDoc={activeDoc} setAD={(id) => { setActiveDoc(id); setEditingDoc(false); addRecent(id); }} onEditDoc={(id) => { setActiveDoc(id); setEditingDoc(true); addRecent(id); }} docs={docs} setDocs={setDocs} t={t} favs={favs} toggleFav={toggleFav} drag={drag} setDrag={setDrag} />)}</div>}
           {view === "gallery" && <div><div style={{ fontSize: 9, letterSpacing: "0.15em", textTransform: "uppercase", color: t.mt, padding: "4px 8px", fontFamily: sf }}>{T("documents")}</div></div>}
         </div>}
         {isMini && <div style={{ flex: 1 }} />}
@@ -1167,6 +1256,7 @@ db.saveSettings({
                         <button onClick={() => setTemplateOpen(true)} className="glass-btn" style={{ height: 34, padding: "0 16px", borderRadius: 10, border: "none", background: R, color: "#fff", cursor: "pointer", fontFamily: sf, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5, boxShadow: `0 2px 8px ${R}40` }}>✦ {T("template")}</button>
                         <button onClick={addBlankDoc} className="glass-btn" style={{ height: 34, padding: "0 16px", borderRadius: 10, border: `1px solid ${t.glassBd}`, background: t.glassHi, color: t.mt, cursor: "pointer", fontFamily: sf, fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}><Plus s={12} />{T("blank")}</button>
                         <button onClick={() => importRef.current?.click()} className="glass-btn" style={{ height: 34, padding: "0 16px", borderRadius: 10, border: `1px solid ${t.glassBd}`, background: t.glassHi, color: t.mt, cursor: "pointer", fontFamily: sf, fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}><UpI s={12} />{T("importMd")}</button>
+                        <button onClick={() => importFolderRef.current?.click()} className="glass-btn" style={{ height: 34, padding: "0 16px", borderRadius: 10, border: `1px solid ${t.glassBd}`, background: t.glassHi, color: t.mt, cursor: "pointer", fontFamily: sf, fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}><FolderOpenI s={12} />{T("importFolder")}</button>
                       </div>
                     </div>
                   </div>
