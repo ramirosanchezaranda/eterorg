@@ -2,6 +2,132 @@
   "items": [
     {
       "meta": {
+        "generated_at_utc": "2026-02-25T03:41:00Z",
+        "timestamp_id": "20260225-0341",
+        "language": "es-AR",
+        "country_focus": "Argentina"
+      },
+      "project": {
+        "title": "Copiloto IA de Cobranzas Antifraude por WhatsApp para PyMEs (AR)",
+        "slug": "copiloto-cobranzas-antifraude-whatsapp-pyme-ar",
+        "model": "ia-aplicada",
+        "category": "cobranzas-riesgo-operativo",
+        "summary": "Implementación rápida de un copiloto IA que valida comprobantes de transferencia, detecta riesgo de fraude y acelera liberación de pedidos desde WhatsApp.",
+        "pain": "Demora de cobranzas y liberación de pedidos por validación manual de comprobantes, con riesgo de fraude y retrabajo administrativo.",
+        "icp": {
+          "segments": [
+            "Distribuidores PyME",
+            "Mayoristas con ventas por WhatsApp",
+            "eCommerce con alto volumen de transferencias"
+          ],
+          "geo": "AMBA + principales ciudades de Argentina",
+          "size": "Empresas con 300-6000 comprobantes/mes",
+          "buyer_roles": [
+            "Dueño/a",
+            "Gerencia de Administración y Finanzas",
+            "Responsable de Cobranzas",
+            "Operaciones"
+          ]
+        }
+      },
+      "market_signals": [
+        {
+          "source": "Google News RSS",
+          "url": "https://news.google.com/rss/search?q=pymes+argentina+morosidad&hl=es-419&gl=AR&ceid=AR:es-419",
+          "date_observed": "2026-02-25",
+          "signal": "Cobertura reciente sobre mora en niveles elevados y tensión de crédito para hogares/actividad pyme.",
+          "implication": "Reducir tiempos de validación y liberar pedidos más rápido impacta directo en caja y mora comercial."
+        },
+        {
+          "source": "Google News RSS",
+          "url": "https://news.google.com/rss/search?q=ARCA+factura+electr%C3%B3nica+Argentina&hl=es-419&gl=AR&ceid=AR:es-419",
+          "date_observed": "2026-02-25",
+          "signal": "Novedades frecuentes sobre factura electrónica y cambios operativos ligados a ARCA.",
+          "implication": "Las PyMEs necesitan procesos más automatizados y auditables para no frenar cobranzas por errores administrativos."
+        },
+        {
+          "source": "Google News RSS",
+          "url": "https://news.google.com/rss/search?q=estafas+transferencias+Argentina+empresas&hl=es-419&gl=AR&ceid=AR:es-419",
+          "date_observed": "2026-02-25",
+          "signal": "Persistencia de noticias y alertas sobre fraude en transferencias y operaciones no autorizadas.",
+          "implication": "Existe urgencia comercial por incorporar validación antifraude en el flujo diario de cobranzas."
+        }
+      ],
+      "offer": {
+        "value_proposition": "Validar cobranzas por transferencia con IA y score antifraude en 9 días, sin reemplazar ERP/facturador.",
+        "promise_7_14_days": "En 9 días corridos reducimos al menos 35% el tiempo de liberación de pedidos cobrados y bajamos 50% los casos dudosos sin criterio trazable.",
+        "implementation_time": "9 días corridos (rango 7-14 días según complejidad)",
+        "deliverables": [
+          "Inbox único de comprobantes (WhatsApp/email/carga manual)",
+          "OCR + validación de consistencia de comprobantes",
+          "Score de riesgo por transacción con reglas auditables",
+          "Bandeja de excepciones y aprobación humana",
+          "Alertas automáticas a ventas/administración",
+          "Tablero diario de tiempos, sospechas y conciliación"
+        ]
+      },
+      "pricing": {
+        "currency_reference": [
+          "ARS",
+          "USD"
+        ],
+        "setup": {
+          "ars": 2350000,
+          "usd": 1680
+        },
+        "monthly": {
+          "ars": 690000,
+          "usd": 495
+        },
+        "low_ticket": {
+          "name": "Starter Antifraude 7D",
+          "ars": 189000,
+          "usd": 135,
+          "includes": "Hasta 300 comprobantes, 1 canal WhatsApp, score básico y reporte operativo"
+        }
+      },
+      "sales": {
+        "whatsapp_script_3_lines": [
+          "Te escribo porque varias PyMEs están perdiendo horas validando comprobantes de transferencia y frenan entregas por dudas de fraude.",
+          "En 9 días te implementamos un copiloto IA que verifica comprobantes y prioriza riesgos sin cambiar tu operatoria actual.",
+          "Si querés, hoy te muestro un diagnóstico de 15 minutos y te dejo propuesta cerrada para empezar en 24h."
+        ],
+        "common_objections": [
+          {
+            "objection": "Mi equipo ya revisa todo manual.",
+            "response": "El copiloto no reemplaza criterio humano: filtra y prioriza para que el equipo valide más rápido y con menos errores."
+          },
+          {
+            "objection": "No quiero depender de IA.",
+            "response": "Cada recomendación queda trazada con evidencia, reglas visibles y opción de aprobación final humana."
+          },
+          {
+            "objection": "No tengo presupuesto ahora.",
+            "response": "Arrancamos con low-ticket de 7 días; escalás solo si ves mejora operativa y de tiempos."
+          }
+        ],
+        "close_in_24h_next_step": "Diagnóstico de 20 minutos hoy + propuesta final en el día + reserva de kickoff con 50% de seña dentro de 24 horas."
+      },
+      "delivery": {
+        "kpis": [
+          "Tiempo promedio de liberación post-pago",
+          "% de comprobantes validados automáticamente",
+          "Cantidad de casos sospechosos detectados",
+          "Horas administrativas ahorradas por semana"
+        ],
+        "stack_sugerido": [
+          "WhatsApp Business API",
+          "n8n/Make",
+          "OCR + LLM",
+          "Google Sheets o PostgreSQL",
+          "Webhooks/API de facturador/ERP"
+        ]
+      },
+      "_ingested_at_utc": "2026-02-25T03:41:32.470Z",
+      "_source": "openclaw"
+    },
+    {
+      "meta": {
         "generated_at_utc": "2026-02-25T02:40:00Z",
         "timestamp_id": "20260225-0240",
         "language": "es-AR",
